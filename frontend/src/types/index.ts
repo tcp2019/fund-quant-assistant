@@ -20,6 +20,17 @@ export interface Overview {
   holdings: Holding[]
 }
 
+export interface SnapshotSummary {
+  id: number
+  created_at: string
+  source: string
+  total_value: number
+}
+
+export interface SnapshotsListOut {
+  snapshots: SnapshotSummary[]
+}
+
 export type OcrPlatform = 'alipay' | 'tiantian' | 'licaitong'
 
 export interface ParsedHolding {
@@ -85,4 +96,23 @@ export interface RiskOut {
   sharpe: number | null
   max_dd: number | null
   period_days: number
+}
+
+export interface StrategyThresholds {
+  rebalance_deviation_pct: number
+  rebalance_force_days: number
+  single_fund_max_pct: number
+  correlation_max: number
+}
+
+export interface StrategyConfig {
+  template_name: string
+  target_weights: Record<string, number>
+  thresholds: StrategyThresholds
+}
+
+export interface DataSyncResult {
+  synced: number
+  codes: string[]
+  signals_count?: number
 }

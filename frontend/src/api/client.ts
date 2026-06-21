@@ -1,9 +1,11 @@
 import type {
   CorrelationOut,
+  DataSyncResult,
   OcrConfirmResponse,
   OcrUploadResponse,
   RiskOut,
   SignalsListOut,
+  StrategyConfig,
 } from '../types'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -101,4 +103,20 @@ export async function fetchCorrelation(): Promise<CorrelationOut> {
 
 export async function fetchRisk(): Promise<RiskOut> {
   return api.get<RiskOut>('/api/analysis/risk')
+}
+
+export async function fetchStrategy(): Promise<StrategyConfig> {
+  return api.get<StrategyConfig>('/api/settings/strategy')
+}
+
+export async function updateStrategy(body: {
+  template_name: string
+  target_weights?: Record<string, number>
+  thresholds?: StrategyConfig['thresholds']
+}): Promise<StrategyConfig> {
+  return api.put<StrategyConfig>('/api/settings/strategy', body)
+}
+
+export async function syncData(): Promise<DataSyncResult> {
+  return api.post<DataSyncResult>('/api/data/sync', {})
 }

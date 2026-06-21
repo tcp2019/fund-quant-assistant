@@ -1,3 +1,5 @@
+from pydantic import BaseModel, Field
+
 DEFAULT_TEMPLATES = {
     "balanced": {
         "stock": 0.40,
@@ -28,3 +30,22 @@ DEFAULT_THRESHOLDS = {
     "single_fund_max_pct": 25.0,
     "correlation_max": 0.85,
 }
+
+
+class StrategyThresholds(BaseModel):
+    rebalance_deviation_pct: float = Field(default=5.0, ge=0.1, le=50.0)
+    rebalance_force_days: float = Field(default=365, ge=1, le=3650)
+    single_fund_max_pct: float = Field(default=25.0, ge=5.0, le=100.0)
+    correlation_max: float = Field(default=0.85, ge=0.0, le=1.0)
+
+
+class StrategyOut(BaseModel):
+    template_name: str
+    target_weights: dict[str, float]
+    thresholds: dict[str, float]
+
+
+class StrategyUpdateIn(BaseModel):
+    template_name: str
+    target_weights: dict[str, float] | None = None
+    thresholds: StrategyThresholds | None = None
