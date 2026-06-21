@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.portfolio import router as portfolio_router
 from app.config import settings
 from app.db.session import create_db_and_tables
 
@@ -22,6 +23,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(portfolio_router)
 
 
 @app.get("/api/health")
