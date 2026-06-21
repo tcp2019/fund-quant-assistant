@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.analysis import router as analysis_router
 from app.api.routes.data import router as data_router
 from app.api.routes.ocr import router as ocr_router
 from app.api.routes.portfolio import router as portfolio_router
@@ -31,6 +32,7 @@ app.include_router(portfolio_router)
 app.include_router(ocr_router)
 app.include_router(data_router)
 app.include_router(signals_router)
+app.include_router(analysis_router)
 
 
 @app.get("/api/health")

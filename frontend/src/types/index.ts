@@ -71,3 +71,18 @@ export interface SignalsListOut {
   snapshot_id: number | null
   signals: Signal[]
 }
+
+export interface CorrelationOut {
+  snapshot_id: number | null
+  labels: string[]
+  matrix: number[][]
+  period_days: number
+}
+
+export interface RiskOut {
+  snapshot_id: number | null
+  volatility: number | null
+  sharpe: number | null
+  max_dd: number | null
+  period_days: number
+}
