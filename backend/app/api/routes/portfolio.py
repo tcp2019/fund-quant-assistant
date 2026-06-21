@@ -3,7 +3,7 @@ from sqlmodel import Session
 
 from app.api.deps import get_db
 from app.repositories import portfolio as repo
-from app.schemas.portfolio import OverviewOut, SnapshotCreate
+from app.schemas.portfolio import OverviewOut, SnapshotCreate, SnapshotsListOut
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -16,6 +16,11 @@ def overview(session: Session = Depends(get_db)):
 @router.get("/holdings", response_model=OverviewOut)
 def holdings(session: Session = Depends(get_db)):
     return repo.build_overview(session)
+
+
+@router.get("/snapshots", response_model=SnapshotsListOut)
+def list_snapshots(session: Session = Depends(get_db)):
+    return SnapshotsListOut(snapshots=repo.list_snapshots(session))
 
 
 @router.post("/snapshots", status_code=201)

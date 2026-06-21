@@ -1,7 +1,7 @@
 from sqlmodel import Session, select
 
 from app.db.models import Holding, PortfolioSnapshot
-from app.schemas.portfolio import HoldingIn, OverviewOut, SnapshotCreate
+from app.schemas.portfolio import HoldingIn, OverviewOut, SnapshotCreate, SnapshotSummaryOut
 
 
 def get_latest_snapshot(session: Session) -> PortfolioSnapshot | None:
@@ -51,6 +51,25 @@ def create_snapshot(session: Session, data: SnapshotCreate) -> PortfolioSnapshot
         )
     session.commit()
     return snap
+
+
+def list_snapshots(session: Session) -> list[SnapshotSummaryOut]:
+    snaps = session.exec(
+        select(PortfolioSnapshot).order_by(PortfolioSnapshot.created_at.desc())
+    ).all()
+    summaries: list[SnapshotSummaryOut] = []
+    for snap in snaps:
+        holdings = session.exec(select(Holding).where(Holding.snapshot_id == snap.id)).all()
+        total_value = round(sum(h.market_value for h in holdings), 2)
+        summaries.append(
+            SnapshotSummaryOut(
+                id=snap.id,
+                created_at=snap.created_at,
+                source=snap.source,
+                total_value=total_value,
+            )
+        )
+    return summaries
 
 
 def build_overview(session: Session) -> OverviewOut:

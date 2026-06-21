@@ -97,22 +97,3 @@ export interface RiskOut {
   max_dd: number | null
   period_days: number
 }
-
-export interface StrategyThresholds {
-  rebalance_deviation_pct: number
-  rebalance_force_days: number
-  single_fund_max_pct: number
-  correlation_max: number
-}
-
-export interface StrategyConfig {
-  template_name: string
-  target_weights: Record<string, number>
-  thresholds: StrategyThresholds
-}
-
-export interface DataSyncResult {
-  synced: number
-  codes: string[]
-  signals_count?: number
-}

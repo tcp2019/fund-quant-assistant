@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -30,3 +32,14 @@ class OverviewOut(BaseModel):
     total_profit: float
     total_profit_rate: float
     holdings: list[HoldingOut]
+
+
+class SnapshotSummaryOut(BaseModel):
+    id: int
+    created_at: datetime
+    source: str
+    total_value: float
+
+
+class SnapshotsListOut(BaseModel):
+    snapshots: list[SnapshotSummaryOut]
