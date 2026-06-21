@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.data import router as data_router
 from app.api.routes.ocr import router as ocr_router
 from app.api.routes.portfolio import router as portfolio_router
+from app.api.routes.signals import router as signals_router
 from app.config import settings
 from app.db.session import create_db_and_tables
 
@@ -29,6 +30,7 @@ app.add_middleware(
 app.include_router(portfolio_router)
 app.include_router(ocr_router)
 app.include_router(data_router)
+app.include_router(signals_router)
 
 
 @app.get("/api/health")
