@@ -19,3 +19,27 @@ export interface Overview {
   total_profit_rate: number
   holdings: Holding[]
 }
+
+export type OcrPlatform = 'alipay' | 'tiantian' | 'licaitong'
+
+export interface ParsedHolding {
+  fund_code: string
+  fund_name: string
+  shares: number
+  cost_price: number
+  market_value: number
+  profit: number
+  profit_rate: number
+  platform: string
+  confidence?: number
+}
+
+export interface OcrUploadResponse {
+  job_id: number
+  holdings: ParsedHolding[]
+  warnings: string[]
+}
+
+export interface OcrConfirmResponse {
+  snapshot_id: number
+}
