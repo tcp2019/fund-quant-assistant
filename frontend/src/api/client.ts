@@ -1,4 +1,4 @@
-import type { OcrConfirmResponse, OcrUploadResponse } from '../types'
+import type { OcrConfirmResponse, OcrUploadResponse, SignalsListOut } from '../types'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -83,4 +83,8 @@ export async function confirmOcr(
   holdings: OcrUploadResponse['holdings'],
 ): Promise<OcrConfirmResponse> {
   return api.post<OcrConfirmResponse>(`/api/ocr/${jobId}/confirm`, { holdings })
+}
+
+export async function fetchSignals(): Promise<SignalsListOut> {
+  return api.get<SignalsListOut>('/api/signals')
 }

@@ -43,3 +43,31 @@ export interface OcrUploadResponse {
 export interface OcrConfirmResponse {
   snapshot_id: number
 }
+
+export interface SignalReason {
+  layer: string
+  rule: string
+  detail: string
+  category?: string | null
+  category_label?: string | null
+}
+
+export interface Signal {
+  id: number
+  snapshot_id: number
+  fund_code: string
+  fund_name: string | null
+  category: string | null
+  category_label: string | null
+  signal_type: 'reduce' | 'add' | 'hold' | 'watch' | string
+  score: number
+  strength: number
+  reasons: SignalReason[]
+  suggested_amount: number
+  created_at: string
+}
+
+export interface SignalsListOut {
+  snapshot_id: number | null
+  signals: Signal[]
+}
