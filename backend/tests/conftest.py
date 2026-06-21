@@ -6,6 +6,7 @@ from sqlmodel import SQLModel
 
 _db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite:///{_db_file.name}"
+os.environ["UPLOAD_DIR"] = tempfile.mkdtemp()
 
 
 @pytest.fixture(autouse=True)

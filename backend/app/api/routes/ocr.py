@@ -1,10 +1,13 @@
 import json
 from datetime import datetime
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session
 
 from app.api.deps import get_db
+from app.config import settings
 from app.db.models import OcrJob
 from app.repositories import portfolio as repo
 from app.schemas.ocr import (
@@ -15,7 +18,7 @@ from app.schemas.ocr import (
     ParsedHoldingOut,
 )
 from app.schemas.portfolio import SnapshotCreate
-from app.services.ocr.pipeline import parse_ocr_text, validate_holding
+from app.services.ocr.pipeline import parse_ocr_text, run_paddle_ocr, validate_holding
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
@@ -34,9 +37,10 @@ def _to_holding_out(row) -> ParsedHoldingOut:
     )
 
 
-@router.post("/upload", response_model=OcrUploadResponse)
-def upload(data: OcrUploadRequest, session: Session = Depends(get_db)):
-    rows = parse_ocr_text(data.text, platform_hint=data.platform)
+def _build_upload_response(
+    text: str, platform_hint: str | None, session: Session
+) -> OcrUploadResponse:
+    rows = parse_ocr_text(text, platform_hint=platform_hint)
     warnings: list[str] = []
     holdings = []
     for row in rows:
@@ -52,6 +56,36 @@ def upload(data: OcrUploadRequest, session: Session = Depends(get_db)):
     session.refresh(job)
 
     return OcrUploadResponse(job_id=job.id, holdings=holdings, warnings=warnings)
+
+
+@router.post("/upload", response_model=OcrUploadResponse)
+async def upload(request: Request, session: Session = Depends(get_db)):
+    content_type = request.headers.get("content-type", "")
+
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        upload_file = form.get("file")
+        if upload_file is None or not hasattr(upload_file, "read"):
+            raise HTTPException(status_code=422, detail="file is required for multipart upload")
+
+        platform = form.get("platform")
+        platform_hint = platform if isinstance(platform, str) and platform else None
+
+        upload_path = Path(settings.upload_dir)
+        upload_path.mkdir(parents=True, exist_ok=True)
+        suffix = Path(getattr(upload_file, "filename", None) or "upload.png").suffix or ".png"
+        dest = upload_path / f"{uuid4()}{suffix}"
+        dest.write_bytes(await upload_file.read())
+
+        try:
+            text = run_paddle_ocr(str(dest))
+        except ImportError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
+
+        return _build_upload_response(text, platform_hint, session)
+
+    data = OcrUploadRequest.model_validate(await request.json())
+    return _build_upload_response(data.text, data.platform, session)
 
 
 @router.post("/{job_id}/confirm", response_model=OcrConfirmResponse, status_code=201)

@@ -20,6 +20,27 @@ def parse_ocr_text(text: str, platform_hint: str | None = None) -> list[ParsedHo
     return []
 
 
+def run_paddle_ocr(image_path: str) -> str:
+    try:
+        from paddleocr import PaddleOCR
+    except ImportError as exc:
+        raise ImportError(
+            "PaddleOCR is not installed. Use text upload mode or install OCR extras: "
+            "pip install 'fund-quant-assistant[ocr]'"
+        ) from exc
+
+    ocr = PaddleOCR(use_angle_cls=True, lang="ch")
+    result = ocr.ocr(image_path, cls=True)
+    lines: list[str] = []
+    for page in result or []:
+        if not page:
+            continue
+        for line in page:
+            if line and len(line) > 1 and line[1]:
+                lines.append(line[1][0])
+    return "\n".join(lines)
+
+
 def validate_holding(row: ParsedHolding) -> list[str]:
     warnings: list[str] = []
     if row.shares <= 0 or row.market_value <= 0:
