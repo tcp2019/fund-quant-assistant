@@ -31,6 +31,8 @@ DEFAULT_THRESHOLDS = {
     "rebalance_force_days": 365,
     "single_fund_max_pct": 25.0,
     "correlation_max": 0.85,
+    "min_suggested_trade_cny": 500.0,
+    "max_funds_per_category": 10,
 }
 
 
@@ -42,6 +44,8 @@ class StrategyThresholds(BaseModel):
     rebalance_force_days: float = Field(default=365, ge=1, le=3650)
     single_fund_max_pct: float = Field(default=25.0, ge=5.0, le=100.0)
     correlation_max: float = Field(default=0.85, ge=0.0, le=1.0)
+    min_suggested_trade_cny: float = Field(default=500.0, ge=0.0, le=100_000.0)
+    max_funds_per_category: int = Field(default=10, ge=2, le=100)
 
 
 class StrategyOut(BaseModel):

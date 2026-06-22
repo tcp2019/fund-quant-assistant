@@ -1,21 +1,29 @@
 import json
 from collections import defaultdict
+from datetime import datetime
 
 from sqlmodel import Session, select
 
 from app.db.models import FundMetadata, FundMetricsCache, Holding, SignalRecord, StrategyConfig
 from app.repositories.portfolio import get_latest_snapshot
 from app.schemas.settings import DEFAULT_TEMPLATES, DEFAULT_THRESHOLDS
+from app.services.analysis import compute_correlation
 from app.services.fund_classifier import classify_fund
 from app.services.signals.concentration import compute_concentration_signals
+from app.services.signals.consolidation import compute_consolidation_signals
+from app.services.signals.min_trade import apply_min_trade_to_signals
 from app.services.signals.performance import compute_performance_signals
-from app.services.signals.rebalance import CATEGORY_LABELS, compute_rebalance_signals
+from app.services.signals.rebalance import CATEGORY_LABELS, compute_rebalance_review_signals, compute_rebalance_signals
 from app.services.fund_purchase_limits import apply_purchase_limits_to_signals, purchase_info_from_metadata
 from app.services.signals.intra_category import (
     allocate_category_add,
+    allocate_category_reduce,
     compute_fund_gaps,
+    compute_fund_surpluses,
     is_performance_blocked_add,
+    performance_reduce_multiplier,
     resolve_intra_category_weights,
+    weight_surpluses_for_reduce,
 )
 
 LAYER_WEIGHTS = {"rebalance": 0.4, "concentration": 0.3, "performance": 0.3}
@@ -115,11 +123,14 @@ def _build_category_add_amounts(
     intra_category_mode: str,
     fund_target_weights: dict[str, float] | None,
     perf_by_fund: dict[str, dict],
-) -> tuple[dict[str, float], dict[str, float], dict[str, float], set[str]]:
+    overcrowded_categories: set[str] | None = None,
+) -> tuple[dict[str, float], dict[str, float], dict[str, float], set[str], set[str]]:
     amounts: dict[str, float] = defaultdict(float)
     gaps_by_code: dict[str, float] = {}
     weights_by_code: dict[str, float] = {}
     blocked: set[str] = set()
+    consolidation_blocked: set[str] = set()
+    overcrowded = overcrowded_categories or set()
 
     for signal in rebalance:
         if signal["signal_type"] != "add":
@@ -150,10 +161,66 @@ def _build_category_add_amounts(
             category_gap_amount=gap_amount,
             fund_gaps=fund_gaps,
         )
+        if category in overcrowded:
+            for code in intra_weights:
+                if fund_gaps.get(code, 0.0) > 0 or allocated.get(code, 0.0) > 0:
+                    consolidation_blocked.add(code)
+                    allocated[code] = 0.0
         for code, value in allocated.items():
             amounts[code] += value
 
-    return dict(amounts), gaps_by_code, weights_by_code, blocked
+    return dict(amounts), gaps_by_code, weights_by_code, blocked, consolidation_blocked
+
+
+def _build_category_reduce_amounts(
+    rebalance: list[dict],
+    fund_categories: dict[str, str],
+    market_value_by_code: dict[str, float],
+    total_value: float,
+    category_targets: dict[str, float],
+    intra_category_mode: str,
+    fund_target_weights: dict[str, float] | None,
+    perf_by_fund: dict[str, dict],
+) -> tuple[dict[str, float], dict[str, float], set[str]]:
+    amounts: dict[str, float] = defaultdict(float)
+    surpluses_by_code: dict[str, float] = {}
+    performance_boosted: set[str] = set()
+
+    for signal in rebalance:
+        if signal["signal_type"] != "reduce":
+            continue
+        category = signal["category"]
+        reduce_amount = abs(signal["suggested_amount"])
+        category_target = category_targets.get(category, 0.0)
+        intra_weights = resolve_intra_category_weights(
+            intra_category_mode,
+            fund_categories,
+            market_value_by_code,
+            category=category,
+            custom_weights=fund_target_weights,
+        )
+        fund_surpluses = compute_fund_surpluses(
+            market_value_by_code=market_value_by_code,
+            intra_weights=intra_weights,
+            total_value=total_value,
+            category_target=category_target,
+        )
+        for code in intra_weights:
+            surpluses_by_code[code] = fund_surpluses.get(code, 0.0)
+            if (
+                fund_surpluses.get(code, 0.0) > 0
+                and performance_reduce_multiplier(perf_by_fund.get(code)) > 1.0
+            ):
+                performance_boosted.add(code)
+        weighted_surpluses = weight_surpluses_for_reduce(fund_surpluses, perf_by_fund)
+        allocated = allocate_category_reduce(
+            category_reduce_amount=reduce_amount,
+            fund_surpluses=weighted_surpluses,
+        )
+        for code, value in allocated.items():
+            amounts[code] += value
+
+    return dict(amounts), surpluses_by_code, performance_boosted
 
 
 def aggregate_signals(
@@ -167,6 +234,7 @@ def aggregate_signals(
     category_targets: dict[str, float] | None = None,
     intra_category_mode: str = "equal",
     fund_target_weights: dict[str, float] | None = None,
+    overcrowded_categories: set[str] | None = None,
 ) -> list[dict]:
     market_value_by_code = market_value_by_code or {}
     category_targets = category_targets or {}
@@ -176,7 +244,20 @@ def aggregate_signals(
         conc_by_fund[signal["fund_code"]].append(signal)
     perf_by_fund = {signal["fund_code"]: signal for signal in performance}
 
-    add_amounts, gaps_by_code, weights_by_code, performance_blocked = _build_category_add_amounts(
+    add_amounts, gaps_by_code, weights_by_code, performance_blocked, consolidation_blocked = (
+        _build_category_add_amounts(
+        rebalance,
+        fund_categories,
+        market_value_by_code,
+        total_value,
+        category_targets,
+        intra_category_mode,
+        fund_target_weights,
+        perf_by_fund,
+        overcrowded_categories=overcrowded_categories,
+    )
+    )
+    reduce_amounts, surpluses_by_code, performance_boosted_reduce = _build_category_reduce_amounts(
         rebalance,
         fund_categories,
         market_value_by_code,
@@ -214,6 +295,13 @@ def aggregate_signals(
                     category_targets.get(category, 0.0),
                     intra_weight,
                 )
+            elif rebalance_signal["signal_type"] == "reduce":
+                suggested_amount += reduce_amounts.get(fund_code, 0.0)
+                intra_surplus = surpluses_by_code.get(fund_code, 0.0)
+                detail = (
+                    f"{rebalance_signal['detail']}；类内减配 ¥{abs(suggested_amount):.0f}"
+                    f"（类内超配 ¥{intra_surplus:.0f}）"
+                )
             else:
                 detail = rebalance_signal["detail"]
             reasons.append(
@@ -229,6 +317,22 @@ def aggregate_signals(
                         "layer": "performance",
                         "rule": "performance_blocked_add",
                         "detail": "业绩偏弱，不参与增配分配",
+                    }
+                )
+            if fund_code in consolidation_blocked:
+                reasons.append(
+                    {
+                        "layer": "aggregate",
+                        "rule": "consolidation_blocked_add",
+                        "detail": "大类持仓过多，类内增配已暂停，建议先合并为核心持仓",
+                    }
+                )
+            if fund_code in performance_boosted_reduce:
+                reasons.append(
+                    {
+                        "layer": "performance",
+                        "rule": "performance_prioritized_reduce",
+                        "detail": "业绩偏弱，减配分配权重提高",
                     }
                 )
 
@@ -265,6 +369,8 @@ def aggregate_signals(
             reasons.extend(perf_signal.get("reasons", []))
 
         score = max(-100.0, min(100.0, round(score, 2)))
+        if fund_code in performance_blocked and suggested_amount > 0:
+            score = min(score, 15.0)
         if not reasons:
             reasons.append(
                 {
@@ -314,6 +420,95 @@ def aggregate_signals(
             }
         )
 
+    for rebalance_signal in rebalance:
+        if rebalance_signal["signal_type"] != "reduce":
+            continue
+        intensity = min(abs(rebalance_signal["deviation_pct"]) / 20.0, 1.0)
+        category_score = round(
+            _layer_contribution("reduce", LAYER_WEIGHTS["rebalance"], intensity), 2
+        )
+        label = CATEGORY_LABELS.get(rebalance_signal["category"], rebalance_signal["category"])
+        results.append(
+            {
+                "fund_code": "",
+                "category": rebalance_signal["category"],
+                "signal_type": "reduce",
+                "score": category_score,
+                "strength": _score_to_strength(category_score),
+                "reasons": [
+                    {
+                        "layer": "rebalance",
+                        "rule": "category_overweight",
+                        "detail": rebalance_signal["detail"],
+                        "category": rebalance_signal["category"],
+                        "category_label": label,
+                    }
+                ],
+                "suggested_amount": rebalance_signal["suggested_amount"],
+                "category_label": label,
+            }
+        )
+
+    return results
+
+
+def append_review_signals(
+    results: list[dict],
+    review: list[dict],
+) -> list[dict]:
+    for signal in review:
+        label = CATEGORY_LABELS.get(signal["category"], signal["category"])
+        score = round(_layer_contribution("watch", LAYER_WEIGHTS["rebalance"], 0.5), 2)
+        results.append(
+            {
+                "fund_code": "",
+                "category": signal["category"],
+                "signal_type": "watch",
+                "score": score,
+                "strength": _score_to_strength(score),
+                "reasons": [
+                    {
+                        "layer": "rebalance",
+                        "rule": "rebalance_review_due",
+                        "detail": signal["detail"],
+                        "category": signal["category"],
+                        "category_label": label,
+                    }
+                ],
+                "suggested_amount": 0.0,
+                "category_label": label,
+            }
+        )
+    return results
+
+
+def append_consolidation_signals(
+    results: list[dict],
+    consolidation: list[dict],
+) -> list[dict]:
+    for signal in consolidation:
+        label = CATEGORY_LABELS.get(signal["category"], signal["category"])
+        score = round(_layer_contribution("watch", LAYER_WEIGHTS["concentration"], 1.0), 2)
+        results.append(
+            {
+                "fund_code": "",
+                "category": signal["category"],
+                "signal_type": "watch",
+                "score": score,
+                "strength": _score_to_strength(score),
+                "reasons": [
+                    {
+                        "layer": "concentration",
+                        "rule": "category_overcrowded",
+                        "detail": signal["detail"],
+                        "category": signal["category"],
+                        "category_label": label,
+                    }
+                ],
+                "suggested_amount": 0.0,
+                "category_label": label,
+            }
+        )
     return results
 
 
@@ -387,20 +582,49 @@ def run_signal_engine(session: Session) -> list[SignalRecord]:
         category_weights[category] += share
 
     target, thresholds, intra_category_mode, fund_target_weights = _load_strategy(session)
+    days_since_snapshot = 0
+    if snap.created_at is not None:
+        created = snap.created_at
+        if created.tzinfo is not None:
+            created = created.replace(tzinfo=None)
+        days_since_snapshot = (datetime.utcnow() - created).days
+    force_review = days_since_snapshot >= thresholds.get("rebalance_force_days", 365)
     rebalance = compute_rebalance_signals(
         dict(category_weights),
         target,
         total_value,
         thresholds["rebalance_deviation_pct"],
+        force_review=force_review,
+    )
+    review = compute_rebalance_review_signals(
+        dict(category_weights),
+        target,
+        total_value,
+        thresholds["rebalance_deviation_pct"],
+        force_review=force_review,
+    )
+    corr_payload = compute_correlation(session)
+    corr_matrix = (
+        corr_payload
+        if corr_payload.get("labels") and corr_payload.get("matrix")
+        else None
     )
     concentration = compute_concentration_signals(
         holdings_payload,
-        corr_matrix=None,
+        corr_matrix=corr_matrix,
         thresholds=thresholds,
     )
+    consolidation = compute_consolidation_signals(
+        fund_categories,
+        max_funds_per_category=int(thresholds.get("max_funds_per_category", 10)),
+        corr_matrix=corr_matrix,
+        correlation_max=thresholds.get("correlation_max", 0.85),
+    )
+    overcrowded_categories = {signal["category"] for signal in consolidation}
     performance = compute_performance_signals(
         [holding.fund_code for holding in holdings],
         _load_metrics(session, [holding.fund_code for holding in holdings]),
+        fund_categories=fund_categories,
     )
 
     aggregated = aggregate_signals(
@@ -413,6 +637,12 @@ def run_signal_engine(session: Session) -> list[SignalRecord]:
         category_targets=target,
         intra_category_mode=intra_category_mode,
         fund_target_weights=fund_target_weights,
+        overcrowded_categories=overcrowded_categories,
+    )
+    aggregated = append_consolidation_signals(aggregated, consolidation)
+    aggregated = append_review_signals(aggregated, review)
+    aggregated = apply_min_trade_to_signals(
+        aggregated, thresholds.get("min_suggested_trade_cny", 500.0)
     )
 
     purchase_info_by_code = {

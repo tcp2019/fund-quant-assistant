@@ -24,3 +24,19 @@ def test_hold_reduce_maps_to_reduce():
         {"layer": "rebalance", "rule": "reduce", "detail": "减配"},
     ]
     assert classify_signal_action("hold", reasons, -800.0, -22.0) == "reduce"
+
+
+def test_performance_blocked_add_maps_to_watch():
+    reasons = [
+        {"layer": "rebalance", "rule": "category_underweight", "detail": "低配"},
+        {"layer": "performance", "rule": "performance_blocked_add", "detail": "过滤"},
+    ]
+    assert classify_signal_action("add", reasons, 1000.0, 25.0) == "watch"
+
+
+def test_consolidation_blocked_add_maps_to_watch():
+    reasons = [
+        {"layer": "rebalance", "rule": "category_underweight", "detail": "低配"},
+        {"layer": "aggregate", "rule": "consolidation_blocked_add", "detail": "暂停"},
+    ]
+    assert classify_signal_action("add", reasons, 1000.0, 25.0) == "watch"

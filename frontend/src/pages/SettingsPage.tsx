@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchStrategy, refreshFundCatalog, syncData, updateStrategy } from '../api/client'
-import type { StrategyConfig } from '../types'
+import type { Holding, Overview, StrategyConfig } from '../types'
 import {
   enableNotificationsWithPermission,
   getNotificationsEnabled,
@@ -58,6 +58,7 @@ const PRESET_WEIGHTS: Record<string, Record<string, number>> = {
 const INTRA_CATEGORY_OPTIONS = [
   { value: 'equal', label: '类内等权目标' },
   { value: 'pro_rata', label: '按现占比维持结构' },
+  { value: 'custom', label: '自定义类内权重' },
 ] as const
 
 function formatWeightPct(value: number) {
@@ -81,15 +82,22 @@ export default function SettingsPage() {
   const [targetWeights, setTargetWeights] = useState<Record<string, number>>({})
   const [rebalanceDeviation, setRebalanceDeviation] = useState(5)
   const [singleFundMax, setSingleFundMax] = useState(25)
+  const [minSuggestedTrade, setMinSuggestedTrade] = useState(500)
+  const [maxFundsPerCategory, setMaxFundsPerCategory] = useState(10)
   const [intraCategoryMode, setIntraCategoryMode] =
     useState<StrategyConfig['intra_category_mode']>('equal')
+  const [fundTargetWeights, setFundTargetWeights] = useState<Record<string, number>>({})
+  const [holdingsForCustom, setHoldingsForCustom] = useState<Holding[]>([])
 
   const applyConfig = useCallback((config: StrategyConfig) => {
     setTemplateName(config.template_name)
     setTargetWeights(config.target_weights)
     setRebalanceDeviation(config.thresholds.rebalance_deviation_pct)
     setSingleFundMax(config.thresholds.single_fund_max_pct)
+    setMinSuggestedTrade(config.thresholds.min_suggested_trade_cny ?? 500)
+    setMaxFundsPerCategory(config.thresholds.max_funds_per_category ?? 10)
     setIntraCategoryMode(config.intra_category_mode ?? 'equal')
+    setFundTargetWeights(config.fund_target_weights ?? {})
   }, [])
 
   useEffect(() => {
@@ -140,6 +148,31 @@ export default function SettingsPage() {
     }
   }, [applyConfig])
 
+  useEffect(() => {
+    if (intraCategoryMode !== 'custom') {
+      return
+    }
+    let cancelled = false
+    async function loadHoldings() {
+      try {
+        const overview = await fetch('/api/portfolio/holdings').then(
+          (r) => r.json() as Promise<Overview>,
+        )
+        if (!cancelled) {
+          setHoldingsForCustom(overview.holdings ?? [])
+        }
+      } catch {
+        if (!cancelled) {
+          setHoldingsForCustom([])
+        }
+      }
+    }
+    void loadHoldings()
+    return () => {
+      cancelled = true
+    }
+  }, [intraCategoryMode])
+
   function handleTemplateChange(value: string) {
     setTemplateName(value)
     if (value !== 'custom' && PRESET_WEIGHTS[value]) {
@@ -151,6 +184,13 @@ export default function SettingsPage() {
     setTargetWeights((prev) => ({
       ...prev,
       [category]: pct / 100,
+    }))
+  }
+
+  function handleFundTargetWeightChange(fundCode: string, pct: number) {
+    setFundTargetWeights((prev) => ({
+      ...prev,
+      [fundCode]: pct / 100,
     }))
   }
 
@@ -167,10 +207,15 @@ export default function SettingsPage() {
           rebalance_force_days: 365,
           single_fund_max_pct: singleFundMax,
           correlation_max: 0.85,
+          min_suggested_trade_cny: minSuggestedTrade,
+          max_funds_per_category: maxFundsPerCategory,
         },
       }
       if (templateName === 'custom') {
         body.target_weights = targetWeights
+      }
+      if (intraCategoryMode === 'custom') {
+        body.fund_target_weights = fundTargetWeights
       }
       const config = await updateStrategy(body)
       applyConfig(config)
@@ -269,6 +314,9 @@ export default function SettingsPage() {
 
   const isCustom = templateName === 'custom'
   const weightSum = Object.values(targetWeights).reduce((sum, value) => sum + value, 0)
+  const fundWeightSum = Object.values(fundTargetWeights).reduce((sum, value) => sum + value, 0)
+  const customWeightsValid =
+    intraCategoryMode !== 'custom' || Math.abs(fundWeightSum - 1) < 0.01
 
   return (
     <div className="space-y-6">
@@ -373,6 +421,51 @@ export default function SettingsPage() {
             ))}
           </select>
         </div>
+
+        {intraCategoryMode === 'custom' ? (
+          <div className="mt-6">
+            <h4 className="text-sm font-medium text-slate-700">类内自定义权重</h4>
+            <p className="mt-1 text-xs text-slate-500">
+              为当前持仓指定类内目标权重，合计须为 100%（未列出的同类基金将等分剩余）
+            </p>
+            {holdingsForCustom.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-500">暂无持仓，请先导入</p>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {holdingsForCustom.map((holding) => (
+                  <div key={holding.fund_code} className="flex items-center gap-4">
+                    <span className="min-w-0 flex-1 truncate text-sm text-slate-600">
+                      {holding.fund_name}
+                      <span className="ml-2 font-mono text-xs text-slate-400">
+                        {holding.fund_code}
+                      </span>
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={Math.round((fundTargetWeights[holding.fund_code] ?? 0) * 100)}
+                      onChange={(event) =>
+                        handleFundTargetWeightChange(
+                          holding.fund_code,
+                          Number(event.target.value),
+                        )
+                      }
+                      className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-right font-mono text-sm"
+                    />
+                    <span className="text-sm text-slate-500">%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p
+              className={`mt-2 text-xs ${customWeightsValid ? 'text-slate-500' : 'text-rose-600'}`}
+            >
+              类内权重合计 {Math.round(fundWeightSum * 100)}%（需等于 100%）
+            </p>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -420,6 +513,50 @@ export default function SettingsPage() {
               />
               <span className="w-14 text-right font-mono text-sm text-slate-700">
                 {singleFundMax}%
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="min-trade" className="block text-sm font-medium text-slate-700">
+              最小建议交易额
+            </label>
+            <p className="text-xs text-slate-500">低于此金额的增配/减配建议将被抑制</p>
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                id="min-trade"
+                type="range"
+                min={0}
+                max={5000}
+                step={100}
+                value={minSuggestedTrade}
+                onChange={(event) => setMinSuggestedTrade(Number(event.target.value))}
+                className="flex-1"
+              />
+              <span className="w-20 text-right font-mono text-sm text-slate-700">
+                ¥{minSuggestedTrade}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="max-funds" className="block text-sm font-medium text-slate-700">
+              大类持仓数量上限
+            </label>
+            <p className="text-xs text-slate-500">同大类超过此数量时提示合并为核心持仓</p>
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                id="max-funds"
+                type="range"
+                min={5}
+                max={30}
+                step={1}
+                value={maxFundsPerCategory}
+                onChange={(event) => setMaxFundsPerCategory(Number(event.target.value))}
+                className="flex-1"
+              />
+              <span className="w-14 text-right font-mono text-sm text-slate-700">
+                {maxFundsPerCategory} 只
               </span>
             </div>
           </div>
@@ -549,7 +686,7 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving || (isCustom && Math.abs(weightSum - 1) >= 0.01)}
+          disabled={saving || (isCustom && Math.abs(weightSum - 1) >= 0.01) || !customWeightsValid}
           className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saving ? '保存中...' : '保存策略'}

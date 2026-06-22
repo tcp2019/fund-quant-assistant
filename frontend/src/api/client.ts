@@ -6,7 +6,9 @@ import type {
   OcrUploadResponse,
   OpportunitiesOut,
   RiskOut,
+  SensitivityReport,
   SignalsListOut,
+  SnapshotStatsOut,
   StrategyConfig,
   ThemeCandidatesOut,
   ThemeOption,
@@ -162,4 +164,12 @@ export async function fetchOpportunities(params?: {
   if (params?.theme_limit) search.set('theme_limit', String(params.theme_limit))
   const qs = search.toString()
   return api.get<OpportunitiesOut>(`/api/opportunities${qs ? `?${qs}` : ''}`)
+}
+
+export async function fetchBacktestSensitivity(): Promise<SensitivityReport> {
+  return api.get<SensitivityReport>('/api/backtest/sensitivity')
+}
+
+export async function fetchBacktestSnapshotStats(): Promise<SnapshotStatsOut> {
+  return api.get<SnapshotStatsOut>('/api/backtest/snapshot-stats')
 }

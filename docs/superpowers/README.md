@@ -44,3 +44,5 @@ docs/superpowers/
 | v1.2 候选/搜索/通知 | [2026-06-21-v12-recommendations-notifications-design.md](specs/active/2026-06-21-v12-recommendations-notifications-design.md) | — | [plan](plans/completed/2026-06-21-v12-recommendations-notifications.md) |
 | v1.3 类内增配分配 | [2026-06-22-intra-category-rebalance-allocation-design.md](specs/active/2026-06-22-intra-category-rebalance-allocation-design.md) | — | [plan](plans/completed/2026-06-22-intra-category-rebalance-allocation.md) |
 | v1.4 机会中心 + 热点雷达 | [2026-06-22-opportunities-hotspot-radar-design.md](specs/active/2026-06-22-opportunities-hotspot-radar-design.md) | — | [plan](plans/completed/2026-06-22-opportunities-hotspot-radar.md) |
+| v1.5 组合管理基础 A/B/C/D | [2026-06-22-portfolio-management-foundation-design.md](specs/active/2026-06-22-portfolio-management-foundation-design.md) | — | [plan](plans/completed/2026-06-22-portfolio-management-foundation.md) |
+| v1.6 信号一致性 · 结构优先 | [2026-06-22-signal-coherence-structural-first-design.md](specs/active/2026-06-22-signal-coherence-structural-first-design.md) | — | [plan](plans/completed/2026-06-22-signal-coherence-structural-first.md) |

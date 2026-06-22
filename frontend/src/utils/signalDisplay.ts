@@ -55,6 +55,9 @@ export const REASON_RULE_LABELS: Record<string, string> = {
   purchase_suspended: '暂停申购',
   redemption_hard_to_rebuy: '卖出难买回',
   performance_blocked_add: '业绩过滤',
+  performance_prioritized_reduce: '减配优先',
+  category_overcrowded: '持仓过多',
+  below_min_trade: '低于最小交易额',
 }
 
 export function formatReasonRule(rule: string) {

@@ -8,6 +8,18 @@ PURCHASE_LIMIT_WATCH_RULES = frozenset(
 PURCHASE_LIMIT_ADD_BLOCK_RULES = frozenset({"purchase_limit_blocked", "purchase_suspended"})
 
 
+def _performance_blocked_add(reasons: list[dict]) -> bool:
+    return any(reason.get("rule") == "performance_blocked_add" for reason in reasons)
+
+
+def _consolidation_blocked_add(reasons: list[dict]) -> bool:
+    return any(reason.get("rule") == "consolidation_blocked_add" for reason in reasons)
+
+
+def _add_blocked_by_quality(reasons: list[dict]) -> bool:
+    return _performance_blocked_add(reasons) or _consolidation_blocked_add(reasons)
+
+
 def _protected_by_purchase_limit(reasons: list[dict]) -> bool:
     return any(
         reason.get("layer") == "purchase_limit"
@@ -34,6 +46,8 @@ def classify_signal_action(
         return "watch"
 
     if signal_type != "hold":
+        if signal_type == "add" and _add_blocked_by_quality(reasons):
+            return "watch"
         return signal_type
 
     rebalance = _rebalance_rules(reasons)
@@ -42,6 +56,8 @@ def classify_signal_action(
         and score > 0
         and rebalance & {"add", "category_underweight"}
     ):
+        if _add_blocked_by_quality(reasons):
+            return "watch"
         blocked = any(
             reason.get("layer") == "purchase_limit"
             and reason.get("rule") in PURCHASE_LIMIT_ADD_BLOCK_RULES

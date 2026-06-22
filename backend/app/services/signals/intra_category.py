@@ -19,6 +19,34 @@ def is_performance_blocked_add(perf_signal: dict | None) -> bool:
     )
 
 
+def performance_reduce_multiplier(perf_signal: dict | None) -> float:
+    """Weak performers receive more of category reduce allocation."""
+    if not perf_signal:
+        return 1.0
+    if perf_signal.get("signal_type") == "reduce":
+        return 2.5
+    if perf_signal.get("signal_type") == "watch":
+        if any(
+            reason.get("layer") == "performance"
+            for reason in perf_signal.get("reasons") or []
+        ):
+            return 1.5
+    return 1.0
+
+
+def weight_surpluses_for_reduce(
+    fund_surpluses: dict[str, float],
+    perf_by_fund: dict[str, dict],
+) -> dict[str, float]:
+    weighted: dict[str, float] = {}
+    for code, surplus in fund_surpluses.items():
+        if surplus <= 0:
+            weighted[code] = 0.0
+            continue
+        weighted[code] = round(surplus * performance_reduce_multiplier(perf_by_fund.get(code)), 2)
+    return weighted
+
+
 def resolve_intra_category_weights(
     mode: str,
     fund_categories: dict[str, str],
@@ -71,6 +99,21 @@ def compute_fund_gaps(
     return gaps
 
 
+def compute_fund_surpluses(
+    *,
+    market_value_by_code: dict[str, float],
+    intra_weights: dict[str, float],
+    total_value: float,
+    category_target: float,
+) -> dict[str, float]:
+    surpluses: dict[str, float] = {}
+    for code, weight in intra_weights.items():
+        target_mv = category_target * weight * total_value
+        surplus = market_value_by_code.get(code, 0.0) - target_mv
+        surpluses[code] = max(0.0, round(surplus, 2))
+    return surpluses
+
+
 def allocate_category_add(
     *,
     category_gap_amount: float,
@@ -92,5 +135,30 @@ def allocate_category_add(
             amounts[code] = share
             allocated += share
     for code in fund_gaps:
+        amounts.setdefault(code, 0.0)
+    return amounts
+
+
+def allocate_category_reduce(
+    *,
+    category_reduce_amount: float,
+    fund_surpluses: dict[str, float],
+) -> dict[str, float]:
+    positive = {code: surplus for code, surplus in fund_surpluses.items() if surplus > 0}
+    total_surplus = sum(positive.values())
+    if total_surplus <= 0 or category_reduce_amount <= 0:
+        return {code: 0.0 for code in fund_surpluses}
+
+    codes = sorted(positive.keys())
+    amounts: dict[str, float] = {}
+    allocated = 0.0
+    for index, code in enumerate(codes):
+        if index == len(codes) - 1:
+            amounts[code] = round(-(category_reduce_amount - allocated), 2)
+        else:
+            share = round(category_reduce_amount * positive[code] / total_surplus, 2)
+            amounts[code] = -share
+            allocated += share
+    for code in fund_surpluses:
         amounts.setdefault(code, 0.0)
     return amounts

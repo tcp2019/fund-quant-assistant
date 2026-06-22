@@ -49,6 +49,8 @@
 | v1.2.1 | 主题暴露、申购限购保护、定时 sync、持仓重估、同类排名业绩信号 — 见主 spec §5 |
 | v1.3 | 类内目标权重增配分配 — [设计规格](specs/active/2026-06-22-intra-category-rebalance-allocation-design.md) |
 | v1.4 | 机会中心 + 热点雷达 — [设计规格](specs/active/2026-06-22-opportunities-hotspot-radar-design.md) |
+| v1.5 | 组合管理基础（双向再平衡/去重/业绩v2/回测） — [设计规格](specs/active/2026-06-22-portfolio-management-foundation-design.md) |
+| v1.6 | 信号一致性 · 结构优先（Consolidation 阻断增配/审视提醒/机会分层） — [设计规格](specs/active/2026-06-22-signal-coherence-structural-first-design.md) |
 | v1.4.1 / v1.5 | 财经新闻摘要接入热点雷达；浏览器通知增强、更多 OCR 来源（待定） |
 | v2 | 账号体系、多设备同步、PostgreSQL |
 | Future | 回测、LLM 解释、更多 OCR 来源 |
@@ -223,7 +225,7 @@ ocr_jobs(id, status, image_paths, parsed_json, confirmed_at)
 | QDII/海外 | 10% |
 | 其他 | 5% |
 
-- 触发：`｜当前权重 − 目标权重｜ > 5%` → 加/减仓信号；距上次再平衡 > 365 天 → 强制检查
+- 触发：`｜当前权重 − 目标权重｜ > 5%` → 加/减仓信号；距上次再平衡 > 365 天 → 审视提醒（v1.6：带宽内偏离发 `watch`，不强制交易）
 - 输出示例：「债券低配 6.2%，建议增配 ¥X」
 
 #### 层 2：风险/集中度（权重 30%）

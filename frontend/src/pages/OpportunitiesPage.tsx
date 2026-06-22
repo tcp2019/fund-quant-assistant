@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, fetchOpportunities } from '../api/client'
 import ActionList from '../components/ActionList'
+import StructuralAlerts from '../components/StructuralAlerts'
 import type { FundCandidate, HotTheme, OpportunitiesOut } from '../types'
 
 type TabKey = 'actions' | 'themes'
@@ -124,6 +125,8 @@ export default function OpportunitiesPage() {
   }
 
   const snapshotId = data?.snapshot_id ?? null
+  const structuralActions = data?.structural_actions ?? []
+  const hasConsolidateBlock = structuralActions.some((item) => item.action === 'consolidate')
   const totalActions =
     (data?.sell_actions.length ?? 0) +
     (data?.buy_actions.length ?? 0) +
@@ -215,7 +218,8 @@ export default function OpportunitiesPage() {
 
           {activeTab === 'actions' ? (
             <div className="space-y-6">
-              {totalActions === 0 ? (
+              <StructuralAlerts items={structuralActions} />
+              {totalActions === 0 && structuralActions.length === 0 ? (
                 <p className="rounded-xl border border-slate-200 bg-white px-5 py-6 text-sm text-slate-500 shadow-sm">
                   暂无明确行动，组合配置较为均衡
                 </p>
@@ -226,6 +230,11 @@ export default function OpportunitiesPage() {
                 emptyText="暂无卖出建议"
                 tone="sell"
               />
+              {hasConsolidateBlock && (data?.buy_actions.length ?? 0) > 0 ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  以下增配已因持仓过多暂停；请先处理上方结构问题。
+                </p>
+              ) : null}
               <ActionList
                 title="持仓增配"
                 items={data?.buy_actions ?? []}
@@ -233,7 +242,7 @@ export default function OpportunitiesPage() {
                 tone="buy"
               />
               <ActionList
-                title="探索新买"
+                title="探索新买（浏览参考，非配置建议）"
                 items={data?.explore_actions ?? []}
                 emptyText="暂无大类缺口或热点交叉机会"
                 tone="explore"

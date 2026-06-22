@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, fetchThemeCandidates, fetchThemes } from '../api/client'
+import { api, fetchBacktestSensitivity, fetchBacktestSnapshotStats, fetchThemeCandidates, fetchThemes } from '../api/client'
+import BacktestPanel from '../components/BacktestPanel'
 import StatCard from '../components/StatCard'
 import ThemeExposurePanel from '../components/ThemeExposurePanel'
-import type { CorrelationOut, RiskOut, ThemeAllocation, ThemeOption } from '../types'
+import type {
+  CorrelationOut,
+  RiskOut,
+  SensitivityReport,
+  SnapshotStatsOut,
+  ThemeAllocation,
+  ThemeOption,
+} from '../types'
 
 function formatPercent(value: number, digits = 2) {
   return `${(value * 100).toFixed(digits)}%`
@@ -70,6 +78,8 @@ export default function AnalysisPage() {
   const [risk, setRisk] = useState<RiskOut | null>(null)
   const [themeAllocation, setThemeAllocation] = useState<ThemeAllocation[]>([])
   const [themes, setThemes] = useState<ThemeOption[]>([])
+  const [sensitivity, setSensitivity] = useState<SensitivityReport | null>(null)
+  const [snapshotStats, setSnapshotStats] = useState<SnapshotStatsOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -78,17 +88,22 @@ export default function AnalysisPage() {
 
     async function loadAnalysis() {
       try {
-        const [corrData, riskData, overview, themeList] = await Promise.all([
+        const [corrData, riskData, overview, themeList, sensitivityData, statsData] =
+          await Promise.all([
           api.get<CorrelationOut>('/api/analysis/correlation'),
           api.get<RiskOut>('/api/analysis/risk'),
           api.get<{ theme_allocation?: ThemeAllocation[] }>('/api/portfolio/overview'),
           fetchThemes(),
+          fetchBacktestSensitivity(),
+          fetchBacktestSnapshotStats(),
         ])
         if (!cancelled) {
           setCorrelation(corrData)
           setRisk(riskData)
           setThemeAllocation(overview.theme_allocation ?? [])
           setThemes(themeList)
+          setSensitivity(sensitivityData)
+          setSnapshotStats(statsData)
           setError(null)
         }
       } catch (err) {
@@ -219,6 +234,13 @@ export default function AnalysisPage() {
         <p className="mt-2 text-xs text-slate-500">
           在 Dashboard 主题卡片中可查看近1月候选详情。
         </p>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-slate-900">规则回测与校验</h3>
+        <div className="mt-4">
+          <BacktestPanel sensitivity={sensitivity} snapshotStats={snapshotStats} />
+        </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">

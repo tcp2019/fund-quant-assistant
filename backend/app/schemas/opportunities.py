@@ -5,6 +5,15 @@ from pydantic import BaseModel, Field
 from app.schemas.funds import FundCandidateOut
 
 
+class StructuralActionOut(BaseModel):
+    action: Literal["consolidate", "rebalance_review"]
+    category: str
+    category_label: str
+    detail: str
+    fund_count: int | None = None
+    blocked_buy_count: int | None = None
+
+
 class ActionItemOut(BaseModel):
     action: Literal["sell", "add_holding", "explore"]
     fund_code: str = ""
@@ -33,6 +42,7 @@ class HotThemeOut(BaseModel):
 class OpportunitiesOut(BaseModel):
     snapshot_id: int | None
     data_as_of_date: str | None = None
+    structural_actions: list[StructuralActionOut] = Field(default_factory=list)
     sell_actions: list[ActionItemOut]
     buy_actions: list[ActionItemOut]
     explore_actions: list[ActionItemOut]

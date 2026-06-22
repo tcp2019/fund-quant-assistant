@@ -13,6 +13,7 @@ from app.services.fund_catalog import get_catalog_entry
 from app.services.fund_themes import fund_matches_theme
 
 RANK_TTL_HOURS = 24
+EXPLORE_SORT_FIELD = "explore_balanced"
 DEFAULT_SORT_FIELD = "return_1m"
 
 MONEY_CATEGORY = "money"
@@ -148,7 +149,20 @@ def load_rank_fixture(session: Session, category: str, fixture_name: str) -> lis
     return rows
 
 
+def _explore_composite_score(row: dict) -> float:
+    return_1y = row.get("return_1y")
+    return_1m = row.get("return_1m")
+    if return_1y is None and return_1m is None:
+        return float("-inf")
+    y = float(return_1y) if return_1y is not None else 0.0
+    m = float(return_1m) if return_1m is not None else 0.0
+    return 0.7 * y + 0.3 * m
+
+
 def _sort_key(field: str):
+    if field == "explore_balanced":
+        return _explore_composite_score
+
     def _key(item: dict[str, Any]) -> float:
         value = item.get(field)
         if value is None:

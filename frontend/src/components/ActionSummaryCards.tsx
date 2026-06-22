@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ActionItem, OpportunitiesOut } from '../types'
 import { formatSignalAmount } from '../utils/signalDisplay'
+import StructuralAlerts from './StructuralAlerts'
 
 interface ActionSummaryCardsProps {
   data: OpportunitiesOut | null
@@ -73,8 +74,9 @@ export default function ActionSummaryCards({ data }: ActionSummaryCardsProps) {
 
   const totalActions =
     data.sell_actions.length + data.buy_actions.length + data.explore_actions.length
+  const hasStructural = (data.structural_actions?.length ?? 0) > 0
 
-  if (totalActions === 0) {
+  if (totalActions === 0 && !hasStructural) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-base font-semibold text-slate-900">今日行动</h3>
@@ -91,6 +93,7 @@ export default function ActionSummaryCards({ data }: ActionSummaryCardsProps) {
 
   return (
     <section className="space-y-3">
+      <StructuralAlerts items={data.structural_actions ?? []} />
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h3 className="text-base font-semibold text-slate-900">今日行动</h3>

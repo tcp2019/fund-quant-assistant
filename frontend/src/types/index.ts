@@ -167,6 +167,8 @@ export interface StrategyConfig {
     rebalance_force_days: number
     single_fund_max_pct: number
     correlation_max: number
+    min_suggested_trade_cny: number
+    max_funds_per_category: number
   }
   intra_category_mode: 'equal' | 'pro_rata' | 'custom'
   fund_target_weights: Record<string, number>
@@ -211,11 +213,51 @@ export interface HotTheme {
   candidates: FundCandidate[]
 }
 
+export interface StructuralAction {
+  action: 'consolidate' | 'rebalance_review'
+  category: string
+  category_label: string
+  detail: string
+  fund_count?: number | null
+  blocked_buy_count?: number | null
+}
+
 export interface OpportunitiesOut {
   snapshot_id: number | null
   data_as_of_date: string | null
+  structural_actions: StructuralAction[]
   sell_actions: ActionItem[]
   buy_actions: ActionItem[]
   explore_actions: ActionItem[]
   hot_themes: HotTheme[]
+}
+
+export interface SensitivitySignal {
+  category: string
+  signal_type: string
+  deviation_pct: number
+  suggested_amount: number
+}
+
+export interface SensitivityScenario {
+  threshold_pct: number
+  triggered_categories: number
+  signals: SensitivitySignal[]
+}
+
+export interface SensitivityReport {
+  snapshot_id: number | null
+  total_value: number
+  scenarios: SensitivityScenario[]
+}
+
+export interface SnapshotStat {
+  snapshot_id: number
+  created_at: string
+  rebalance_triggers: number
+  category_count_max: number
+}
+
+export interface SnapshotStatsOut {
+  snapshots: SnapshotStat[]
 }
