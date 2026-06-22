@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 
 const navItems = [
   { to: '/', label: '总览', end: true },
+  { to: '/opportunities', label: '机会' },
   { to: '/import', label: '导入' },
   { to: '/holdings', label: '持仓' },
   { to: '/signals', label: '信号' },

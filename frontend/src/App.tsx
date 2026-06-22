@@ -4,6 +4,7 @@ import AnalysisPage from './pages/AnalysisPage'
 import Dashboard from './pages/Dashboard'
 import HoldingsPage from './pages/HoldingsPage'
 import ImportPage from './pages/ImportPage'
+import OpportunitiesPage from './pages/OpportunitiesPage'
 import SettingsPage from './pages/SettingsPage'
 import SignalsPage from './pages/SignalsPage'
 
@@ -13,6 +14,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
+          <Route path="opportunities" element={<OpportunitiesPage />} />
           <Route path="import" element={<ImportPage />} />
           <Route path="holdings" element={<HoldingsPage />} />
           <Route path="signals" element={<SignalsPage />} />

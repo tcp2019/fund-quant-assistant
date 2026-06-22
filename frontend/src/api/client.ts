@@ -4,6 +4,7 @@ import type {
   FundSearchOut,
   OcrConfirmResponse,
   OcrUploadResponse,
+  OpportunitiesOut,
   RiskOut,
   SignalsListOut,
   StrategyConfig,
@@ -146,4 +147,19 @@ export async function fetchThemeCandidates(
 ): Promise<ThemeCandidatesOut> {
   const params = new URLSearchParams({ sort_by: sortBy, limit: String(limit) })
   return api.get<ThemeCandidatesOut>(`/api/funds/themes/${themeId}/candidates?${params.toString()}`)
+}
+
+export async function fetchOpportunities(params?: {
+  sell_limit?: number
+  buy_limit?: number
+  explore_limit?: number
+  theme_limit?: number
+}): Promise<OpportunitiesOut> {
+  const search = new URLSearchParams()
+  if (params?.sell_limit) search.set('sell_limit', String(params.sell_limit))
+  if (params?.buy_limit) search.set('buy_limit', String(params.buy_limit))
+  if (params?.explore_limit) search.set('explore_limit', String(params.explore_limit))
+  if (params?.theme_limit) search.set('theme_limit', String(params.theme_limit))
+  const qs = search.toString()
+  return api.get<OpportunitiesOut>(`/api/opportunities${qs ? `?${qs}` : ''}`)
 }

@@ -1,27 +1,39 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, fetchOpportunities } from '../api/client'
+import ActionSummaryCards from '../components/ActionSummaryCards'
 import AllocationChart from '../components/AllocationChart'
 import ConcentrationCard from '../components/ConcentrationCard'
+import HotThemeRadar from '../components/HotThemeRadar'
 import HoldingsTable from '../components/HoldingsTable'
 import StatCard from '../components/StatCard'
 import ThemeExposurePanel from '../components/ThemeExposurePanel'
-import type { Overview } from '../types'
+import type { OpportunitiesOut, Overview } from '../types'
 import { formatCurrency, formatProfitAmount, formatSignedPercent } from '../utils/format'
 
 export default function Dashboard() {
   const [overview, setOverview] = useState<Overview | null>(null)
+  const [opportunities, setOpportunities] = useState<OpportunitiesOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
 
-    async function loadOverview() {
+    async function loadDashboard() {
       try {
-        const data = await api.get<Overview>('/api/portfolio/overview')
+        const [overviewData, opportunitiesData] = await Promise.all([
+          api.get<Overview>('/api/portfolio/overview'),
+          fetchOpportunities({
+            sell_limit: 3,
+            buy_limit: 3,
+            explore_limit: 3,
+            theme_limit: 5,
+          }),
+        ])
         if (!cancelled) {
-          setOverview(data)
+          setOverview(overviewData)
+          setOpportunities(opportunitiesData)
           setError(null)
         }
       } catch (err) {
@@ -35,7 +47,7 @@ export default function Dashboard() {
       }
     }
 
-    void loadOverview()
+    void loadDashboard()
 
     return () => {
       cancelled = true
@@ -83,6 +95,9 @@ export default function Dashboard() {
           {overview.data_as_of_date ? ` · 净值截至 ${overview.data_as_of_date}` : ''}
         </p>
       </div>
+
+      <ActionSummaryCards data={opportunities} />
+      <HotThemeRadar themes={opportunities?.hot_themes ?? []} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="总市值" value={formatCurrency(overview.total_value)} />

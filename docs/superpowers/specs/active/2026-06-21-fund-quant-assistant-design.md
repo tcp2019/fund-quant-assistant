@@ -48,7 +48,8 @@
 | v1.2 | 候选基金（akshare 排行）、基金搜索、浏览器通知 — [设计规格](specs/active/2026-06-21-v12-recommendations-notifications-design.md) |
 | v1.2.1 | 主题暴露、申购限购保护、定时 sync、持仓重估、同类排名业绩信号 — 见主 spec §5 |
 | v1.3 | 类内目标权重增配分配 — [设计规格](specs/active/2026-06-22-intra-category-rebalance-allocation-design.md) |
-| v1.4 | 浏览器通知增强、更多 OCR 来源（待定） |
+| v1.4 | 机会中心 + 热点雷达 — [设计规格](specs/active/2026-06-22-opportunities-hotspot-radar-design.md) |
+| v1.4.1 / v1.5 | 财经新闻摘要接入热点雷达；浏览器通知增强、更多 OCR 来源（待定） |
 | v2 | 账号体系、多设备同步、PostgreSQL |
 | Future | 回测、LLM 解释、更多 OCR 来源 |
 

@@ -70,4 +70,5 @@ def test_theme_candidates_with_fixture():
     data = resp.json()
     assert data["theme"] == "cpo_optics"
     assert len(data["candidates"]) >= 1
-    assert data["candidates"][0]["fund_code"] == "159583"
+    assert data["candidates"][0]["fund_code"] == "159585"
+    assert data["candidates"][0]["return_1m"] == 14.0

@@ -185,3 +185,37 @@ export interface DataSyncResult {
   revalued?: number
   as_of_date?: string | null
 }
+
+export interface ActionItem {
+  action: 'sell' | 'add_holding' | 'explore'
+  fund_code: string
+  fund_name: string | null
+  category: string | null
+  category_label: string | null
+  suggested_amount: number
+  score: number
+  strength: number
+  reason_summary: string
+  signal_id: number | null
+  candidates: FundCandidate[]
+}
+
+export interface HotTheme {
+  theme: string
+  label: string
+  heat_score: number
+  return_1m_median: number | null
+  portfolio_weight_pct: number
+  aligned_gap: boolean
+  aligned_category_label: string | null
+  candidates: FundCandidate[]
+}
+
+export interface OpportunitiesOut {
+  snapshot_id: number | null
+  data_as_of_date: string | null
+  sell_actions: ActionItem[]
+  buy_actions: ActionItem[]
+  explore_actions: ActionItem[]
+  hot_themes: HotTheme[]
+}

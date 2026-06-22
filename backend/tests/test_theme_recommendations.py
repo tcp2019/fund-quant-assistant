@@ -18,9 +18,11 @@ def test_recommend_funds_by_theme_cpo():
             limit=3,
             sort_by="return_1m",
         )
-        assert len(candidates) == 1
-        assert candidates[0].fund_code == "159583"
-        assert candidates[0].return_1m == 12.5
+        assert len(candidates) == 3
+        assert candidates[0].fund_code == "159585"
+        assert candidates[0].return_1m == 14.0
+        assert candidates[1].fund_code == "159583"
+        assert candidates[1].return_1m == 12.5
 
 
 def test_recommend_funds_by_theme_unknown():
