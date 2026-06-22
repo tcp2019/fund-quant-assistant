@@ -81,6 +81,12 @@ def get_catalog_entry(session: Session, code: str) -> FundCatalog | None:
     return session.get(FundCatalog, code)
 
 
+def load_catalog_lookup(session: Session) -> dict[str, tuple[str, str]]:
+    """In-memory code → (name, fund_type) for bulk ranking filters."""
+    rows = session.exec(select(FundCatalog)).all()
+    return {row.code: (row.name, row.fund_type or "") for row in rows}
+
+
 def load_catalog_fixture(session: Session, fixture_name: str = "fund_name_em_sample.json") -> int:
     from pathlib import Path
 

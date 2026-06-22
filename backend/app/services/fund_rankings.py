@@ -9,7 +9,7 @@ import pandas as pd
 from sqlmodel import Session, delete, select
 
 from app.db.models import FundRankCache
-from app.services.fund_catalog import get_catalog_entry
+from app.services.fund_catalog import load_catalog_lookup
 from app.services.fund_themes import fund_matches_theme
 
 RANK_TTL_HOURS = 24
@@ -18,6 +18,8 @@ DEFAULT_SORT_FIELD = "return_1m"
 
 MONEY_CATEGORY = "money"
 OPEN_RANK_CATEGORIES = {"stock", "bond", "qdii", "gold", "other"}
+
+CatalogLookup = dict[str, tuple[str, str]]
 
 
 def _parse_return_pct(raw: Any) -> float | None:
@@ -71,15 +73,24 @@ def _load_fixture(name: str) -> list[dict[str, Any]]:
     return _dataframe_to_rank_rows(df)
 
 
+def _resolve_fund_text(
+    fund_code: str,
+    fund_name: str,
+    catalog_lookup: CatalogLookup,
+) -> tuple[str, str]:
+    if fund_code in catalog_lookup:
+        name, fund_type = catalog_lookup[fund_code]
+        return name, fund_type
+    return fund_name, ""
+
+
 def _matches_category(
-    session: Session,
     category: str,
     fund_code: str,
     fund_name: str,
+    catalog_lookup: CatalogLookup,
 ) -> bool:
-    entry = get_catalog_entry(session, fund_code)
-    fund_type = entry.fund_type if entry else ""
-    name = entry.name if entry else fund_name
+    name, fund_type = _resolve_fund_text(fund_code, fund_name, catalog_lookup)
     text = f"{name}{fund_type}"
 
     if category == "stock":
@@ -179,7 +190,11 @@ def filter_rankings_for_category(
     exclude_codes: set[str],
     limit: int = 3,
     sort_by: str = DEFAULT_SORT_FIELD,
+    *,
+    catalog_lookup: CatalogLookup | None = None,
 ) -> list[dict[str, Any]]:
+    lookup = catalog_lookup if catalog_lookup is not None else load_catalog_lookup(session)
+
     if category == MONEY_CATEGORY:
         candidates = rows
         sort_by = "return_1y"
@@ -187,7 +202,7 @@ def filter_rankings_for_category(
         candidates = [
             row
             for row in rows
-            if _matches_category(session, category, row["fund_code"], row["fund_name"])
+            if _matches_category(category, row["fund_code"], row["fund_name"], lookup)
         ]
 
     filtered: list[dict[str, Any]] = []
@@ -207,14 +222,15 @@ def filter_rankings_for_theme(
     exclude_codes: set[str],
     limit: int = 3,
     sort_by: str = DEFAULT_SORT_FIELD,
+    *,
+    catalog_lookup: CatalogLookup | None = None,
 ) -> list[dict[str, Any]]:
+    lookup = catalog_lookup if catalog_lookup is not None else load_catalog_lookup(session)
     filtered: list[dict[str, Any]] = []
     for row in rows:
         if row["fund_code"] in exclude_codes:
             continue
-        entry = get_catalog_entry(session, row["fund_code"])
-        fund_type = entry.fund_type if entry else ""
-        name = entry.name if entry else row["fund_name"]
+        name, fund_type = _resolve_fund_text(row["fund_code"], row["fund_name"], lookup)
         if fund_matches_theme(name, fund_type, theme_id):
             filtered.append(row)
 

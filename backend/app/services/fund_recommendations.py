@@ -2,6 +2,7 @@ from sqlmodel import Session
 
 from app.schemas.funds import FundCandidateOut
 from app.services.fund_rankings import (
+    CatalogLookup,
     DEFAULT_SORT_FIELD,
     fetch_all_open_rankings,
     fetch_rankings,
@@ -30,6 +31,8 @@ def recommend_funds(
     exclude_codes: set[str] | list[str],
     limit: int = 3,
     sort_by: str = DEFAULT_SORT_FIELD,
+    *,
+    catalog_lookup: CatalogLookup | None = None,
 ) -> list[FundCandidateOut]:
     if category == "other":
         return []
@@ -41,7 +44,13 @@ def recommend_funds(
         return []
 
     picked = filter_rankings_for_category(
-        session, category, rows, excluded, limit=limit, sort_by=sort_by
+        session,
+        category,
+        rows,
+        excluded,
+        limit=limit,
+        sort_by=sort_by,
+        catalog_lookup=catalog_lookup,
     )
     return [_candidate_from_row(row, category, source) for row in picked]
 
@@ -52,17 +61,29 @@ def recommend_funds_by_theme(
     exclude_codes: set[str] | list[str],
     limit: int = 3,
     sort_by: str = DEFAULT_SORT_FIELD,
+    *,
+    catalog_lookup: CatalogLookup | None = None,
+    open_rows: list[dict] | None = None,
 ) -> list[FundCandidateOut]:
     if theme_id not in THEME_LABELS:
         return []
 
     excluded = set(exclude_codes)
     try:
-        rows, source = fetch_all_open_rankings(session)
+        if open_rows is None:
+            open_rows, source = fetch_all_open_rankings(session)
+        else:
+            source = "akshare_open_fund_rank"
     except Exception:
         return []
 
     picked = filter_rankings_for_theme(
-        session, theme_id, rows, excluded, limit=limit, sort_by=sort_by
+        session,
+        theme_id,
+        open_rows,
+        excluded,
+        limit=limit,
+        sort_by=sort_by,
+        catalog_lookup=catalog_lookup,
     )
     return [_candidate_from_row(row, theme_id, source) for row in picked]

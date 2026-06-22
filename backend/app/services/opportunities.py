@@ -9,7 +9,8 @@ from app.repositories.portfolio import build_overview, get_latest_snapshot
 from app.schemas.funds import FundCandidateOut
 from app.schemas.opportunities import ActionItemOut, HotThemeOut, OpportunitiesOut, StructuralActionOut
 from app.services.fund_classifier import classify_fund
-from app.services.fund_rankings import EXPLORE_SORT_FIELD
+from app.services.fund_catalog import load_catalog_lookup
+from app.services.fund_rankings import EXPLORE_SORT_FIELD, fetch_all_open_rankings
 from app.services.fund_recommendations import recommend_funds, recommend_funds_by_theme
 from app.services.signals.action_classifier import classify_signal_action
 from app.services.theme_heat import THEME_TO_CATEGORY, rank_hot_themes
@@ -136,6 +137,94 @@ def _underweight_categories(records: list[SignalRecord]) -> dict[str, str]:
     return result
 
 
+def build_hot_themes(
+    session: Session,
+    *,
+    theme_limit: int = 5,
+    underweight: dict[str, str] | None = None,
+    theme_weight: dict[str, float] | None = None,
+    held_codes: set[str] | None = None,
+    include_candidates: bool = True,
+    catalog_lookup: dict[str, tuple[str, str]] | None = None,
+    open_rows: list[dict] | None = None,
+) -> list[HotThemeOut]:
+    underweight = underweight or {}
+    theme_weight = theme_weight or {}
+    held_codes = held_codes or set()
+    lookup = catalog_lookup if catalog_lookup is not None else load_catalog_lookup(session)
+
+    shared_open_rows = open_rows
+    if shared_open_rows is None:
+        try:
+            shared_open_rows, _ = fetch_all_open_rankings(session)
+        except Exception:
+            shared_open_rows = []
+
+    hot_rows = rank_hot_themes(
+        session,
+        limit=theme_limit,
+        catalog_lookup=lookup,
+        open_rows=shared_open_rows,
+    )
+    hot_themes: list[HotThemeOut] = []
+    for row in hot_rows:
+        mapped_category = THEME_TO_CATEGORY.get(row.theme, "stock")
+        aligned = mapped_category in underweight
+        candidates: list[FundCandidateOut] = []
+        if include_candidates and shared_open_rows:
+            candidates = recommend_funds_by_theme(
+                session,
+                row.theme,
+                held_codes,
+                limit=3,
+                sort_by=EXPLORE_SORT_FIELD,
+                catalog_lookup=lookup,
+                open_rows=shared_open_rows,
+            )
+        hot_themes.append(
+            HotThemeOut(
+                theme=row.theme,
+                label=row.label,
+                heat_score=row.heat_score,
+                return_1m_median=row.return_1m_median,
+                portfolio_weight_pct=theme_weight.get(row.theme, 0.0),
+                aligned_gap=aligned,
+                aligned_category_label=underweight.get(mapped_category) if aligned else None,
+                candidates=candidates,
+            )
+        )
+    return hot_themes
+
+
+def build_hot_themes_for_snapshot(
+    session: Session,
+    *,
+    theme_limit: int = 5,
+    include_candidates: bool = False,
+) -> list[HotThemeOut]:
+    snap = get_latest_snapshot(session)
+    if snap is None:
+        return []
+
+    records = session.exec(
+        select(SignalRecord).where(SignalRecord.snapshot_id == snap.id)
+    ).all()
+    holdings = session.exec(select(Holding).where(Holding.snapshot_id == snap.id)).all()
+    held_codes = {h.fund_code for h in holdings if h.fund_code}
+    underweight = _underweight_categories(records)
+    overview = build_overview(session)
+    theme_weight = {item.theme: item.weight_pct for item in (overview.theme_allocation or [])}
+
+    return build_hot_themes(
+        session,
+        theme_limit=theme_limit,
+        underweight=underweight,
+        theme_weight=theme_weight,
+        held_codes=held_codes,
+        include_candidates=include_candidates,
+    )
+
+
 def build_opportunities(
     session: Session,
     *,
@@ -143,6 +232,8 @@ def build_opportunities(
     buy_limit: int = 5,
     explore_limit: int = 5,
     theme_limit: int = 5,
+    include_hot_themes: bool = True,
+    include_theme_candidates: bool = True,
 ) -> OpportunitiesOut:
     snap = get_latest_snapshot(session)
     if snap is None:
@@ -178,6 +269,7 @@ def build_opportunities(
         records, holdings_by_category, fund_category_by_code
     )
 
+    catalog_lookup = load_catalog_lookup(session)
     overview = build_overview(session)
     theme_weight = {
         item.theme: item.weight_pct for item in (overview.theme_allocation or [])
@@ -231,7 +323,12 @@ def build_opportunities(
             and category
         ):
             candidates = recommend_funds(
-                session, category, held_codes, limit=3, sort_by=EXPLORE_SORT_FIELD
+                session,
+                category,
+                held_codes,
+                limit=3,
+                sort_by=EXPLORE_SORT_FIELD,
+                catalog_lookup=catalog_lookup,
             )
             explore_actions.append(
                 ActionItemOut(
@@ -253,25 +350,16 @@ def build_opportunities(
     buy_actions.sort(key=lambda item: item.suggested_amount, reverse=True)
     explore_actions.sort(key=lambda item: abs(item.suggested_amount), reverse=True)
 
-    hot_rows = rank_hot_themes(session, limit=theme_limit)
     hot_themes: list[HotThemeOut] = []
-    for row in hot_rows:
-        mapped_category = THEME_TO_CATEGORY.get(row.theme, "stock")
-        aligned = mapped_category in underweight
-        candidates = recommend_funds_by_theme(
-            session, row.theme, held_codes, limit=3, sort_by=EXPLORE_SORT_FIELD
-        )
-        hot_themes.append(
-            HotThemeOut(
-                theme=row.theme,
-                label=row.label,
-                heat_score=row.heat_score,
-                return_1m_median=row.return_1m_median,
-                portfolio_weight_pct=theme_weight.get(row.theme, 0.0),
-                aligned_gap=aligned,
-                aligned_category_label=underweight.get(mapped_category) if aligned else None,
-                candidates=candidates,
-            )
+    if include_hot_themes:
+        hot_themes = build_hot_themes(
+            session,
+            theme_limit=theme_limit,
+            underweight=underweight,
+            theme_weight=theme_weight,
+            held_codes=held_codes,
+            include_candidates=include_theme_candidates,
+            catalog_lookup=catalog_lookup,
         )
 
     return OpportunitiesOut(

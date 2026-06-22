@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, fetchOpportunities } from '../api/client'
+import { api, fetchHotThemes, fetchOpportunities } from '../api/client'
 import ActionSummaryCards from '../components/ActionSummaryCards'
 import AllocationChart from '../components/AllocationChart'
 import ConcentrationCard from '../components/ConcentrationCard'
@@ -8,13 +8,15 @@ import HotThemeRadar from '../components/HotThemeRadar'
 import HoldingsTable from '../components/HoldingsTable'
 import StatCard from '../components/StatCard'
 import ThemeExposurePanel from '../components/ThemeExposurePanel'
-import type { OpportunitiesOut, Overview } from '../types'
+import type { HotTheme, OpportunitiesOut, Overview } from '../types'
 import { formatCurrency, formatProfitAmount, formatSignedPercent } from '../utils/format'
 
 export default function Dashboard() {
   const [overview, setOverview] = useState<Overview | null>(null)
   const [opportunities, setOpportunities] = useState<OpportunitiesOut | null>(null)
+  const [hotThemes, setHotThemes] = useState<HotTheme[]>([])
   const [loading, setLoading] = useState(true)
+  const [themesLoading, setThemesLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,26 +30,51 @@ export default function Dashboard() {
             sell_limit: 3,
             buy_limit: 3,
             explore_limit: 3,
-            theme_limit: 5,
+            include_hot_themes: false,
           }),
         ])
         if (!cancelled) {
           setOverview(overviewData)
           setOpportunities(opportunitiesData)
           setError(null)
+          setLoading(false)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '加载失败')
-        }
-      } finally {
-        if (!cancelled) {
           setLoading(false)
         }
       }
     }
 
     void loadDashboard()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadHotThemes() {
+      try {
+        const themes = await fetchHotThemes({ theme_limit: 5 })
+        if (!cancelled) {
+          setHotThemes(themes)
+        }
+      } catch {
+        if (!cancelled) {
+          setHotThemes([])
+        }
+      } finally {
+        if (!cancelled) {
+          setThemesLoading(false)
+        }
+      }
+    }
+
+    void loadHotThemes()
 
     return () => {
       cancelled = true
@@ -86,6 +113,10 @@ export default function Dashboard() {
   const profitTone =
     overview.total_profit > 0 ? 'profit' : overview.total_profit < 0 ? 'loss' : 'default'
 
+  const opportunitiesWithThemes: OpportunitiesOut | null = opportunities
+    ? { ...opportunities, hot_themes: hotThemes }
+    : null
+
   return (
     <div className="space-y-6">
       <div>
@@ -96,8 +127,12 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <ActionSummaryCards data={opportunities} />
-      <HotThemeRadar themes={opportunities?.hot_themes ?? []} />
+      <ActionSummaryCards data={opportunitiesWithThemes} />
+      {themesLoading ? (
+        <p className="text-sm text-slate-500">热点雷达加载中...</p>
+      ) : (
+        <HotThemeRadar themes={hotThemes} />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="总市值" value={formatCurrency(overview.total_value)} />

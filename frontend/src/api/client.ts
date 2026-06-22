@@ -4,6 +4,7 @@ import type {
   FundSearchOut,
   OcrConfirmResponse,
   OcrUploadResponse,
+  HotTheme,
   OpportunitiesOut,
   RiskOut,
   SensitivityReport,
@@ -156,14 +157,31 @@ export async function fetchOpportunities(params?: {
   buy_limit?: number
   explore_limit?: number
   theme_limit?: number
+  include_hot_themes?: boolean
+  include_theme_candidates?: boolean
 }): Promise<OpportunitiesOut> {
   const search = new URLSearchParams()
   if (params?.sell_limit) search.set('sell_limit', String(params.sell_limit))
   if (params?.buy_limit) search.set('buy_limit', String(params.buy_limit))
   if (params?.explore_limit) search.set('explore_limit', String(params.explore_limit))
   if (params?.theme_limit) search.set('theme_limit', String(params.theme_limit))
+  if (params?.include_hot_themes === false) search.set('include_hot_themes', 'false')
+  if (params?.include_theme_candidates === false) {
+    search.set('include_theme_candidates', 'false')
+  }
   const qs = search.toString()
   return api.get<OpportunitiesOut>(`/api/opportunities${qs ? `?${qs}` : ''}`)
+}
+
+export async function fetchHotThemes(params?: {
+  theme_limit?: number
+  include_candidates?: boolean
+}): Promise<HotTheme[]> {
+  const search = new URLSearchParams()
+  if (params?.theme_limit) search.set('theme_limit', String(params.theme_limit))
+  if (params?.include_candidates) search.set('include_candidates', 'true')
+  const qs = search.toString()
+  return api.get<HotTheme[]>(`/api/opportunities/hot-themes${qs ? `?${qs}` : ''}`)
 }
 
 export async function fetchBacktestSensitivity(): Promise<SensitivityReport> {

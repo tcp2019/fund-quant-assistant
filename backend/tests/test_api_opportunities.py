@@ -61,3 +61,16 @@ def test_opportunities_includes_structural_actions():
     assert "structural_actions" in data
     assert any(item["action"] == "consolidate" for item in data["structural_actions"])
 
+
+def test_opportunities_include_hot_themes_query_param():
+    resp = client.get("/api/opportunities?include_hot_themes=false")
+    assert resp.status_code == 200
+    assert resp.json()["hot_themes"] == []
+
+
+def test_hot_themes_endpoint():
+    resp = client.get("/api/opportunities/hot-themes?theme_limit=3")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
