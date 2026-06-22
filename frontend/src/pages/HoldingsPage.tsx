@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import HoldingsTable from '../components/HoldingsTable'
 import type { Overview, SnapshotSummary } from '../types'
+import { profitLossToneClass } from '../utils/profitLoss'
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('zh-CN', {
@@ -159,13 +160,10 @@ export default function HoldingsPage() {
                       {formatCurrency(snapshot.total_value)}
                     </td>
                     <td
-                      className={`px-5 py-3 text-right font-medium ${
-                        change.tone === 'profit'
-                          ? 'text-emerald-600'
-                          : change.tone === 'loss'
-                            ? 'text-rose-600'
-                            : 'text-slate-500'
-                      }`}
+                      className={`px-5 py-3 text-right font-medium ${profitLossToneClass(
+                        change.tone,
+                        'text-slate-500',
+                      )}`}
                     >
                       {change.text}
                     </td>

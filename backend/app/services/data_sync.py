@@ -1,6 +1,5 @@
-import time
-from collections.abc import Callable
-from typing import Any, TypeVar
+import json
+from typing import Any
 
 import akshare as ak
 from sqlmodel import Session, select
@@ -8,21 +7,11 @@ from sqlmodel import Session, select
 from app.db.models import FundMetadata, FundNavHistory, Holding
 from app.repositories.portfolio import get_latest_snapshot
 from app.services.fund_classifier import classify_fund
-
-T = TypeVar("T")
-
-
-def _with_retry(fn: Callable[[], T], max_attempts: int = 3, base_delay: float = 1.0) -> T:
-    last_exc: Exception | None = None
-    for attempt in range(max_attempts):
-        try:
-            return fn()
-        except Exception as exc:
-            last_exc = exc
-            if attempt < max_attempts - 1:
-                time.sleep(base_delay * (2**attempt))
-    raise last_exc  # type: ignore[misc]
-
+from app.services.fund_themes import detect_themes
+from app.services.holdings_revalue import revalue_holdings
+from app.services.http_retry import with_retry as _with_retry
+from app.services.metrics_cache import compute_and_cache_metrics
+from app.services.peer_metrics import fetch_peer_return_percentile_3m, parse_user_themes
 
 def fetch_nav_from_akshare(code: str) -> list[dict[str, Any]]:
     def _fetch() -> list[dict[str, Any]]:
@@ -69,6 +58,50 @@ def fetch_metadata_from_akshare(code: str) -> dict[str, str]:
     return _with_retry(_fetch)
 
 
+def fetch_purchase_limits_from_akshare() -> dict[str, dict[str, Any]]:
+    def _fetch() -> dict[str, dict[str, Any]]:
+        df = ak.fund_purchase_em()
+        limits: dict[str, dict[str, Any]] = {}
+        for _, row in df.iterrows():
+            code = str(row.get("基金代码") or "").strip()
+            if not code:
+                continue
+            raw_limit = row.get("日累计限定金额")
+            min_amount = row.get("购买起点")
+            limits[code] = {
+                "purchase_status": str(row.get("申购状态") or ""),
+                "purchase_min_amount": float(min_amount) if min_amount == min_amount else None,
+                "daily_purchase_limit": float(raw_limit) if raw_limit == raw_limit else None,
+            }
+        return limits
+
+    return _with_retry(_fetch)
+
+
+def sync_purchase_limits(session: Session, codes: list[str]) -> int:
+    if not codes:
+        return 0
+
+    limits_by_code = fetch_purchase_limits_from_akshare()
+    updated = 0
+    for code in codes:
+        raw = limits_by_code.get(code)
+        if raw is None:
+            continue
+
+        meta = session.get(FundMetadata, code)
+        if meta is None:
+            continue
+
+        meta.purchase_status = raw["purchase_status"]
+        meta.purchase_min_amount = raw["purchase_min_amount"]
+        meta.daily_purchase_limit = raw["daily_purchase_limit"]
+        updated += 1
+
+    session.commit()
+    return updated
+
+
 def sync_fund_nav(session: Session, code: str) -> int:
     rows = fetch_nav_from_akshare(code)
     synced = 0
@@ -96,6 +129,32 @@ def sync_fund_nav(session: Session, code: str) -> int:
     return synced
 
 
+def _apply_themes(meta: FundMetadata, name: str, fund_type: str) -> None:
+    user_themes = parse_user_themes(meta.user_themes_json)
+    themes = detect_themes(name, fund_type, user_themes)
+    meta.themes_json = json.dumps(themes, ensure_ascii=False)
+
+
+def _apply_peer_metrics(session: Session, code: str) -> None:
+    from app.db.models import FundMetricsCache
+
+    cache = session.exec(
+        select(FundMetricsCache)
+        .where(FundMetricsCache.code == code)
+        .order_by(FundMetricsCache.as_of_date.desc())
+    ).first()
+    if cache is None:
+        return
+
+    peer_percentile = fetch_peer_return_percentile_3m(code)
+    cache.peer_return_percentile_3m = peer_percentile
+    if peer_percentile is not None and cache.return_1y is not None and cache.excess_return_1y is None:
+        if peer_percentile < 50:
+            gap = (50.0 - peer_percentile) / 100.0
+            cache.excess_return_1y = round(-gap * abs(cache.return_1y), 4)
+    session.add(cache)
+
+
 def sync_fund_metadata(
     session: Session, code: str, fallback_name: str = ""
 ) -> FundMetadata:
@@ -110,6 +169,7 @@ def sync_fund_metadata(
         existing.category = category
         existing.benchmark_code = meta["benchmark_code"]
         existing.manager = meta["manager"]
+        _apply_themes(existing, name, meta["fund_type"])
         record = existing
     else:
         record = FundMetadata(
@@ -120,6 +180,7 @@ def sync_fund_metadata(
             benchmark_code=meta["benchmark_code"],
             manager=meta["manager"],
         )
+        _apply_themes(record, name, meta["fund_type"])
         session.add(record)
     session.commit()
     session.refresh(record)
@@ -139,13 +200,44 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
 
     details: list[dict[str, Any]] = []
     synced = 0
+
     for code in codes:
         try:
             sync_fund_metadata(session, code, fallback_name=name_by_code.get(code, ""))
+        except Exception as exc:
+            details.append({"code": code, "status": "metadata_error", "error": str(exc)})
+
+    try:
+        sync_purchase_limits(session, codes)
+    except Exception as exc:
+        details.append({"code": "*", "status": "purchase_limits_error", "error": str(exc)})
+
+    for code in codes:
+        try:
             nav_rows = sync_fund_nav(session, code)
-            details.append({"code": code, "nav_rows": nav_rows, "status": "ok"})
+            metrics = compute_and_cache_metrics(session, code)
+            try:
+                _apply_peer_metrics(session, code)
+                session.commit()
+            except Exception as exc:
+                details.append({"code": code, "status": "peer_metrics_error", "error": str(exc)})
+            details.append(
+                {
+                    "code": code,
+                    "nav_rows": nav_rows,
+                    "metrics_cached": metrics is not None,
+                    "status": "ok",
+                }
+            )
             synced += 1
         except Exception as exc:
             details.append({"code": code, "status": "error", "error": str(exc)})
 
-    return {"synced": synced, "codes": codes, "details": details}
+    revalue = revalue_holdings(session, snap.id)
+    return {
+        "synced": synced,
+        "codes": codes,
+        "details": details,
+        "revalued": revalue["updated"],
+        "as_of_date": revalue["as_of_date"],
+    }

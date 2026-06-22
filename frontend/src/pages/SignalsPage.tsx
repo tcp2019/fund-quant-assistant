@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, fetchSignals } from '../api/client'
-import SignalCard from '../components/SignalCard'
+import SignalsTable from '../components/SignalsTable'
 import type { Signal } from '../types'
+import { maybeNotifyStrongSignals, summarizeStrongSignals } from '../utils/notifications'
 
 function sortSignals(signals: Signal[]) {
   return [...signals].sort((a, b) => b.score - a.score)
@@ -37,7 +38,14 @@ export default function SignalsPage() {
     setError(null)
     try {
       await api.post('/api/data/sync', {})
-      await loadSignals()
+      const data = await fetchSignals()
+      setSignals(sortSignals(data.signals))
+      setSnapshotId(data.snapshot_id)
+      setError(null)
+      const summary = summarizeStrongSignals(data.snapshot_id, data.signals)
+      if (summary) {
+        maybeNotifyStrongSignals(summary)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '同步失败')
     } finally {
@@ -106,11 +114,7 @@ export default function SignalsPage() {
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-          {signals.map((signal) => (
-            <SignalCard key={signal.id} signal={signal} />
-          ))}
-        </div>
+        <SignalsTable signals={signals} />
       )}
     </div>
   )

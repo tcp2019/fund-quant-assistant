@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { confirmOcr, uploadOcr } from '../api/client'
-import type { OcrPlatform, ParsedHolding } from '../types'
+import { confirmOcr, fetchSignals, syncData, uploadOcr } from '../api/client'
+import FundSearchCombobox from '../components/FundSearchCombobox'
+import type { FundSearchResult, OcrPlatform, ParsedHolding } from '../types'
+import { maybeNotifyStrongSignals, summarizeStrongSignals } from '../utils/notifications'
 
 const PLATFORMS: { value: OcrPlatform; label: string }[] = [
   { value: 'alipay', label: '支付宝' },
@@ -9,10 +11,12 @@ const PLATFORMS: { value: OcrPlatform; label: string }[] = [
   { value: 'licaitong', label: '腾讯理财通' },
 ]
 
+type EditableFieldKey = keyof ParsedHolding
+
 const EDITABLE_FIELDS: {
-  key: keyof ParsedHolding
+  key: EditableFieldKey
   label: string
-  type: 'text' | 'number'
+  type: 'text' | 'number' | 'percent'
 }[] = [
   { key: 'fund_code', label: '基金代码', type: 'text' },
   { key: 'fund_name', label: '基金名称', type: 'text' },
@@ -20,13 +24,21 @@ const EDITABLE_FIELDS: {
   { key: 'cost_price', label: '成本价', type: 'number' },
   { key: 'market_value', label: '市值', type: 'number' },
   { key: 'profit', label: '盈亏', type: 'number' },
-  { key: 'profit_rate', label: '收益率', type: 'number' },
+  { key: 'profit_rate', label: '收益率 (%)', type: 'percent' },
 ]
+
+function displayFieldValue(holding: ParsedHolding, key: EditableFieldKey): string {
+  if (key === 'profit_rate') {
+    return holding.profit_rate === 0 ? '' : String(Number((holding.profit_rate * 100).toFixed(4)))
+  }
+  const value = holding[key]
+  return value === undefined || value === null ? '' : String(value)
+}
 
 function updateHoldingField(
   holdings: ParsedHolding[],
   index: number,
-  key: keyof ParsedHolding,
+  key: EditableFieldKey,
   rawValue: string,
 ): ParsedHolding[] {
   return holdings.map((holding, rowIndex) => {
@@ -38,9 +50,25 @@ function updateHoldingField(
       return { ...holding, [key]: rawValue }
     }
 
+    if (key === 'profit_rate') {
+      const parsed = rawValue === '' ? 0 : Number(rawValue)
+      return {
+        ...holding,
+        profit_rate: Number.isFinite(parsed) ? parsed / 100 : holding.profit_rate,
+      }
+    }
+
     const parsed = rawValue === '' ? 0 : Number(rawValue)
     return { ...holding, [key]: Number.isFinite(parsed) ? parsed : holding[key] }
   })
+}
+
+function rowNeedsAttention(holding: ParsedHolding): boolean {
+  return !holding.fund_code || (holding.warnings?.length ?? 0) > 0
+}
+
+function holdingsForConfirm(holdings: ParsedHolding[]): ParsedHolding[] {
+  return holdings.map(({ warnings: _warnings, confidence: _confidence, ...holding }) => holding)
 }
 
 export default function ImportPage() {
@@ -53,11 +81,22 @@ export default function ImportPage() {
   const [warnings, setWarnings] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [importedSnapshotId, setImportedSnapshotId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  function resetImportFlow() {
+    setJobId(null)
+    setHoldings([])
+    setWarnings([])
+    setImportedSnapshotId(null)
+    setError(null)
+  }
 
   async function handleUpload(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
+    resetImportFlow()
 
     if (!file && !text.trim()) {
       setError('请粘贴 OCR 文本，或选择一张持仓截图。')
@@ -74,10 +113,13 @@ export default function ImportPage() {
       setJobId(result.job_id)
       setHoldings(result.holdings)
       setWarnings(result.warnings)
+      if (result.holdings.length === 0) {
+        setError(
+          '未能从文本中解析出持仓记录。请确认已选择正确来源平台，或检查粘贴内容是否为支付宝/天天基金/理财通 OCR 文本。',
+        )
+      }
     } catch (err) {
-      setJobId(null)
-      setHoldings([])
-      setWarnings([])
+      resetImportFlow()
       setError(err instanceof Error ? err.message : '解析失败')
     } finally {
       setUploading(false)
@@ -97,13 +139,82 @@ export default function ImportPage() {
     setConfirming(true)
     setError(null)
     try {
-      await confirmOcr(jobId, holdings)
-      navigate('/')
+      const result = await confirmOcr(jobId, holdingsForConfirm(holdings))
+      setImportedSnapshotId(result.snapshot_id)
+      setHoldings([])
+      setWarnings([])
     } catch (err) {
       setError(err instanceof Error ? err.message : '确认导入失败')
     } finally {
       setConfirming(false)
     }
+  }
+
+  async function handleSyncAndViewSignals() {
+    setSyncing(true)
+    setError(null)
+    try {
+      await syncData()
+      const signalData = await fetchSignals()
+      const summary = summarizeStrongSignals(signalData.snapshot_id, signalData.signals)
+      if (summary) {
+        maybeNotifyStrongSignals(summary)
+      }
+      navigate('/signals')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '同步失败')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  function applyFundSearch(index: number, result: FundSearchResult) {
+    setHoldings((current) =>
+      current.map((holding, rowIndex) =>
+        rowIndex === index
+          ? { ...holding, fund_code: result.fund_code, fund_name: result.fund_name }
+          : holding,
+      ),
+    )
+  }
+
+  function removeHolding(index: number) {
+    setHoldings((current) => current.filter((_, rowIndex) => rowIndex !== index))
+  }
+
+  if (importedSnapshotId !== null) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-8 text-center">
+          <h2 className="text-xl font-semibold text-emerald-900">导入成功</h2>
+          <p className="mt-2 text-sm text-emerald-800">
+            已创建快照 #{importedSnapshotId}。同步净值数据后即可生成量化信号。
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={handleSyncAndViewSignals}
+              disabled={syncing}
+              className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {syncing ? '同步中...' : '同步数据并查看信号'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              查看总览
+            </button>
+          </div>
+          {error ? (
+            <div className="mx-auto mt-4 max-w-lg rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -200,7 +311,7 @@ export default function ImportPage() {
             <div>
               <h3 className="text-base font-semibold text-slate-900">解析结果</h3>
               <p className="mt-1 text-sm text-slate-500">
-                共 {holdings.length} 条记录，可在确认前直接编辑。
+                共 {holdings.length} 条记录，可在确认前直接编辑。缺代码或带警告的行已高亮。
               </p>
             </div>
             <button
@@ -222,27 +333,56 @@ export default function ImportPage() {
                       {label}
                     </th>
                   ))}
+                  <th className="px-3 py-3 font-medium">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {holdings.map((holding, index) => (
-                  <tr key={`${holding.fund_code}-${index}`}>
-                    {EDITABLE_FIELDS.map(({ key, type }) => (
-                      <td key={key} className="px-3 py-2">
-                        <input
-                          type={type}
-                          value={String(holding[key] ?? '')}
-                          onChange={(event) =>
-                            setHoldings((current) =>
-                              updateHoldingField(current, index, key, event.target.value),
-                            )
-                          }
-                          className="w-full min-w-[7rem] rounded-md border border-slate-300 px-2 py-1.5 text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
-                        />
+                {holdings.map((holding, index) => {
+                  const needsAttention = rowNeedsAttention(holding)
+                  return (
+                    <tr
+                      key={`${holding.fund_code}-${holding.fund_name}-${index}`}
+                      className={needsAttention ? 'bg-amber-50/80' : undefined}
+                    >
+                      {EDITABLE_FIELDS.map(({ key, type }) => (
+                        <td key={key} className="px-3 py-2 align-top">
+                          <input
+                            type={type === 'percent' ? 'number' : type}
+                            step={type === 'percent' ? '0.01' : type === 'number' ? 'any' : undefined}
+                            value={displayFieldValue(holding, key)}
+                            onChange={(event) =>
+                              setHoldings((current) =>
+                                updateHoldingField(current, index, key, event.target.value),
+                              )
+                            }
+                            className="w-full min-w-[7rem] rounded-md border border-slate-300 px-2 py-1.5 text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                          />
+                          {key === 'fund_code' && !holding.fund_code ? (
+                            <div className="mt-2">
+                              <FundSearchCombobox onSelect={(result) => applyFundSearch(index, result)} />
+                            </div>
+                          ) : null}
+                          {key === 'fund_code' && (holding.warnings?.length ?? 0) > 0 ? (
+                            <ul className="mt-1 space-y-0.5 text-xs text-amber-700">
+                              {holding.warnings?.map((warning) => (
+                                <li key={warning}>{warning}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </td>
+                      ))}
+                      <td className="px-3 py-2 align-top">
+                        <button
+                          type="button"
+                          onClick={() => removeHolding(index)}
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                        >
+                          删除
+                        </button>
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

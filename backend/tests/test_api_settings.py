@@ -82,6 +82,29 @@ def test_put_strategy_custom_weights_must_sum_to_one():
     assert resp.status_code == 422
 
 
+def test_put_strategy_intra_category_mode():
+    client.get("/api/settings/strategy")
+    resp = client.put(
+        "/api/settings/strategy",
+        json={"template_name": "balanced", "intra_category_mode": "pro_rata"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["intra_category_mode"] == "pro_rata"
+
+
+def test_put_strategy_custom_fund_weights_must_sum_to_one():
+    client.get("/api/settings/strategy")
+    resp = client.put(
+        "/api/settings/strategy",
+        json={
+            "template_name": "balanced",
+            "intra_category_mode": "custom",
+            "fund_target_weights": {"110011": 0.6, "000001": 0.3},
+        },
+    )
+    assert resp.status_code == 422
+
+
 def test_put_strategy_updates_thresholds():
     client.get("/api/settings/strategy")
     resp = client.put(

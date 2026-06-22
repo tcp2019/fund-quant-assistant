@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchCorrelation, fetchRisk } from '../api/client'
+import { api, fetchThemeCandidates, fetchThemes } from '../api/client'
 import StatCard from '../components/StatCard'
-import type { CorrelationOut, RiskOut } from '../types'
+import ThemeExposurePanel from '../components/ThemeExposurePanel'
+import type { CorrelationOut, RiskOut, ThemeAllocation, ThemeOption } from '../types'
 
 function formatPercent(value: number, digits = 2) {
   return `${(value * 100).toFixed(digits)}%`
@@ -67,6 +68,8 @@ function CorrelationHeatmap({ data }: { data: CorrelationOut }) {
 export default function AnalysisPage() {
   const [correlation, setCorrelation] = useState<CorrelationOut | null>(null)
   const [risk, setRisk] = useState<RiskOut | null>(null)
+  const [themeAllocation, setThemeAllocation] = useState<ThemeAllocation[]>([])
+  const [themes, setThemes] = useState<ThemeOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -75,10 +78,17 @@ export default function AnalysisPage() {
 
     async function loadAnalysis() {
       try {
-        const [corrData, riskData] = await Promise.all([fetchCorrelation(), fetchRisk()])
+        const [corrData, riskData, overview, themeList] = await Promise.all([
+          api.get<CorrelationOut>('/api/analysis/correlation'),
+          api.get<RiskOut>('/api/analysis/risk'),
+          api.get<{ theme_allocation?: ThemeAllocation[] }>('/api/portfolio/overview'),
+          fetchThemes(),
+        ])
         if (!cancelled) {
           setCorrelation(corrData)
           setRisk(riskData)
+          setThemeAllocation(overview.theme_allocation ?? [])
+          setThemes(themeList)
           setError(null)
         }
       } catch (err) {
@@ -180,6 +190,35 @@ export default function AnalysisPage() {
             />
           </div>
         )}
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-slate-900">主题暴露与热点候选</h3>
+        <p className="mt-1 text-sm text-slate-500">按日频排行查看存储/CPO 等主题近1月表现</p>
+        <div className="mt-4">
+          <ThemeExposurePanel allocation={themeAllocation} />
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-slate-900">探索其他主题</h3>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {themes
+            .filter((theme) => ['storage_semiconductor', 'cpo_optics', 'ai_compute'].includes(theme.theme))
+            .map((theme) => (
+              <button
+                key={theme.theme}
+                type="button"
+                onClick={() => void fetchThemeCandidates(theme.theme)}
+                className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                {theme.label}
+              </button>
+            ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          在 Dashboard 主题卡片中可查看近1月候选详情。
+        </p>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">

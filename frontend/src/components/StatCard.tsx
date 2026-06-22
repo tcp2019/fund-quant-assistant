@@ -1,3 +1,5 @@
+import { profitLossToneClass } from '../utils/profitLoss'
+
 interface StatCardProps {
   title: string
   value: string
@@ -11,12 +13,7 @@ export default function StatCard({
   subtitle,
   tone = 'default',
 }: StatCardProps) {
-  const valueClass =
-    tone === 'profit'
-      ? 'text-emerald-600'
-      : tone === 'loss'
-        ? 'text-rose-600'
-        : 'text-slate-900'
+  const valueClass = profitLossToneClass(tone)
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

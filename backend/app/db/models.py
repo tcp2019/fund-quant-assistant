@@ -40,6 +40,11 @@ class FundMetadata(SQLModel, table=True):
     category: str = "other"
     benchmark_code: str = ""
     manager: str = ""
+    purchase_status: str = ""
+    purchase_min_amount: Optional[float] = None
+    daily_purchase_limit: Optional[float] = None
+    themes_json: str = "[]"
+    user_themes_json: str = "[]"
 
 
 class FundNavHistory(SQLModel, table=True):
@@ -57,6 +62,24 @@ class FundMetricsCache(SQLModel, table=True):
     sharpe_1y: Optional[float] = None
     max_drawdown_1y: Optional[float] = None
     excess_return_1y: Optional[float] = None
+    return_1y: Optional[float] = None
+    peer_return_percentile_3m: Optional[float] = None
+    computed_from: str = ""
+
+
+class FundCatalog(SQLModel, table=True):
+    code: str = Field(primary_key=True)
+    name: str
+    fund_type: str = ""
+    pinyin_abbr: str = ""
+    synced_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FundRankCache(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    category: str = Field(index=True)
+    payload_json: str = "{}"
+    fetched_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class StrategyConfig(SQLModel, table=True):
@@ -64,6 +87,8 @@ class StrategyConfig(SQLModel, table=True):
     template_name: str = "balanced"
     target_weights_json: str = "{}"
     thresholds_json: str = "{}"
+    intra_category_mode: str = "equal"
+    fund_target_weights_json: str = "{}"
 
 
 class SignalRecord(SQLModel, table=True):

@@ -16,6 +16,7 @@ def test_ocr_upload_and_confirm():
     assert upload.status_code == 200
     job_id = upload.json()["job_id"]
     assert len(upload.json()["holdings"]) == 1
+    assert upload.json()["holdings"][0]["warnings"] == []
     confirm = client.post(f"/api/ocr/{job_id}/confirm", json={"holdings": upload.json()["holdings"]})
     assert confirm.status_code == 201
     overview = client.get("/api/portfolio/overview").json()

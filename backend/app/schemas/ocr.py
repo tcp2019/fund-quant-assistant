@@ -18,6 +18,7 @@ class ParsedHoldingOut(BaseModel):
     profit_rate: float
     platform: str
     confidence: float = 1.0
+    warnings: list[str] = []
 
 
 class OcrUploadResponse(BaseModel):

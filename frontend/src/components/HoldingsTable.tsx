@@ -1,22 +1,15 @@
 import type { Holding } from '../types'
+import { formatCurrency, formatProfitAmount, formatSignedPercent } from '../utils/format'
+import { profitLossTextClass } from '../utils/profitLoss'
+import ThemeTags from './ThemeTags'
 
 interface HoldingsTableProps {
   holdings: Holding[]
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('zh-CN', {
-    style: 'currency',
-    currency: 'CNY',
-    maximumFractionDigits: 2,
-  }).format(value)
-}
-
-function formatPercent(value: number) {
-  return `${(value * 100).toFixed(2)}%`
-}
-
 export default function HoldingsTable({ holdings }: HoldingsTableProps) {
+  const sortedHoldings = [...holdings].sort((a, b) => b.weight_pct - a.weight_pct)
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
@@ -36,29 +29,26 @@ export default function HoldingsTable({ holdings }: HoldingsTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {holdings.map((holding) => (
+            {sortedHoldings.map((holding) => (
               <tr key={`${holding.fund_code}-${holding.platform}`} className="text-slate-700">
                 <td className="px-5 py-3">
                   <div className="font-medium text-slate-900">{holding.fund_name}</div>
                   <div className="text-xs text-slate-500">{holding.fund_code}</div>
+                  <ThemeTags themes={holding.themes ?? []} />
                 </td>
                 <td className="px-5 py-3 capitalize">{holding.platform}</td>
                 <td className="px-5 py-3 text-right">{holding.weight_pct.toFixed(2)}%</td>
                 <td className="px-5 py-3 text-right">{formatCurrency(holding.market_value)}</td>
                 <td className="px-5 py-3 text-right">{formatCurrency(holding.cost_price)}</td>
                 <td
-                  className={`px-5 py-3 text-right font-medium ${
-                    holding.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                  }`}
+                  className={`px-5 py-3 text-right font-medium ${profitLossTextClass(holding.profit)}`}
                 >
-                  {formatCurrency(holding.profit)}
+                  {formatProfitAmount(holding.profit)}
                 </td>
                 <td
-                  className={`px-5 py-3 text-right ${
-                    holding.profit_rate >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                  }`}
+                  className={`px-5 py-3 text-right ${profitLossTextClass(holding.profit_rate)}`}
                 >
-                  {formatPercent(holding.profit_rate)}
+                  {formatSignedPercent(holding.profit_rate)}
                 </td>
               </tr>
             ))}

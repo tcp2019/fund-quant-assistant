@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app.db.models import FundMetadata, FundNavHistory, Holding, PortfolioSnapshot
+from app.db.models import FundMetadata, FundMetricsCache, FundNavHistory, Holding, PortfolioSnapshot
 from app.db.session import engine
 from app.main import app
 from app.services.data_sync import sync_fund_metadata, sync_fund_nav, sync_portfolio_funds
@@ -56,7 +56,19 @@ def test_sync_fund_metadata_mock(monkeypatch):
 
 def test_sync_portfolio_funds_mock(monkeypatch):
     def fake_fetch(code: str):
-        return [{"date": "2025-06-01", "nav": 2.0, "acc_nav": 2.0}]
+        rows = []
+        for day in range(1, 261):
+            month = (day - 1) // 28 + 1
+            dom = (day - 1) % 28 + 1
+            nav = 1.0 + day * 0.001
+            rows.append(
+                {
+                    "date": f"2024-{month:02d}-{dom:02d}",
+                    "nav": nav,
+                    "acc_nav": nav,
+                }
+            )
+        return rows
 
     def fake_metadata(code: str):
         return {
@@ -66,8 +78,21 @@ def test_sync_portfolio_funds_mock(monkeypatch):
             "benchmark_code": "中证500",
         }
 
+    def fake_purchase_limits():
+        return {
+            "110011": {
+                "purchase_status": "开放申购",
+                "purchase_min_amount": 10.0,
+                "daily_purchase_limit": 1e11,
+            }
+        }
+
     monkeypatch.setattr("app.services.data_sync.fetch_nav_from_akshare", fake_fetch)
     monkeypatch.setattr("app.services.data_sync.fetch_metadata_from_akshare", fake_metadata)
+    monkeypatch.setattr(
+        "app.services.data_sync.fetch_purchase_limits_from_akshare",
+        fake_purchase_limits,
+    )
 
     with Session(engine) as session:
         snap = PortfolioSnapshot(source="manual")
@@ -93,11 +118,19 @@ def test_sync_portfolio_funds_mock(monkeypatch):
         nav_rows = session.exec(
             select(FundNavHistory).where(FundNavHistory.code == "110011")
         ).all()
-        assert len(nav_rows) == 1
+        assert len(nav_rows) == 260
 
         meta = session.get(FundMetadata, "110011")
         assert meta is not None
         assert meta.category == "stock"
+        assert meta.purchase_status == "开放申购"
+        assert meta.daily_purchase_limit == 1e11
+
+        metrics = session.exec(
+            select(FundMetricsCache).where(FundMetricsCache.code == "110011")
+        ).first()
+        assert metrics is not None
+        assert metrics.computed_from == "nav_history"
 
 
 def test_api_data_sync(monkeypatch):
@@ -114,6 +147,7 @@ def test_api_data_sync(monkeypatch):
 
     monkeypatch.setattr("app.services.data_sync.fetch_nav_from_akshare", fake_fetch)
     monkeypatch.setattr("app.services.data_sync.fetch_metadata_from_akshare", fake_metadata)
+    monkeypatch.setattr("app.services.data_sync.fetch_purchase_limits_from_akshare", lambda: {})
 
     payload = {
         "holdings": [

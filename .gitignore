@@ -12,3 +12,5 @@ frontend/dist/
 
 # OS / editor
 .DS_Store
+.cursor/
+.codegraph/

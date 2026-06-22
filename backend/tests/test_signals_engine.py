@@ -7,6 +7,7 @@ from app.db.models import FundMetadata, FundMetricsCache, Holding, PortfolioSnap
 from app.db.session import engine
 from app.main import app
 from app.services.signals.engine import aggregate_signals, run_signal_engine
+from app.services.fund_purchase_limits import apply_purchase_limits_to_signal, parse_purchase_record
 
 client = TestClient(app)
 
@@ -70,6 +71,134 @@ def _seed_snapshot(session: Session) -> PortfolioSnapshot:
     return snap
 
 
+def test_aggregate_signals_weak_rebalance_add_classified_as_add():
+    rebalance = [
+        {
+            "category": "stock",
+            "signal_type": "add",
+            "deviation_pct": 9.1,
+            "suggested_amount": 52806.0,
+            "detail": "股票型低配 9.1%，建议增配 ¥52806",
+        }
+    ]
+    fund_categories = {f"00{i:04d}": "stock" for i in range(3)}
+    market_value_by_code = {
+        "000000": 500.0,
+        "000001": 800.0,
+        "000002": 900.0,
+    }
+
+    results = aggregate_signals(
+        rebalance,
+        [],
+        [],
+        fund_categories,
+        market_value_by_code=market_value_by_code,
+        total_value=10000.0,
+        category_targets={"stock": 0.4},
+        intra_category_mode="equal",
+    )
+    fund_results = [item for item in results if item["fund_code"]]
+
+    assert len(fund_results) == 3
+    amounts = [item["suggested_amount"] for item in fund_results]
+    assert abs(sum(amounts) - 52806.0) < 0.1
+    assert len(set(amounts)) > 1
+    for item in fund_results:
+        assert item["signal_type"] == "add"
+        assert item["reasons"][0]["rule"] == "category_underweight"
+        assert item["suggested_amount"] > 0
+
+
+def test_aggregate_signals_allocates_by_intra_category_gap_not_equal_split():
+    rebalance = [
+        {
+            "category": "stock",
+            "signal_type": "add",
+            "deviation_pct": 9.1,
+            "suggested_amount": 3000.0,
+            "detail": "股票型低配 9.1%，建议增配 ¥3000",
+        }
+    ]
+    fund_categories = {"A": "stock", "B": "stock", "C": "stock"}
+    market_value_by_code = {"A": 500.0, "B": 2500.0, "C": 2500.0}
+
+    results = aggregate_signals(
+        rebalance,
+        [],
+        [],
+        fund_categories,
+        market_value_by_code=market_value_by_code,
+        total_value=10000.0,
+        category_targets={"stock": 0.4},
+        intra_category_mode="equal",
+    )
+    by_code = {item["fund_code"]: item for item in results if item["fund_code"]}
+    assert by_code["A"]["suggested_amount"] > by_code["B"]["suggested_amount"]
+
+
+def test_aggregate_signals_performance_blocked_gets_zero_amount():
+    rebalance = [
+        {
+            "category": "stock",
+            "signal_type": "add",
+            "deviation_pct": 10.0,
+            "suggested_amount": 1000.0,
+            "detail": "股票型低配",
+        }
+    ]
+    performance = [
+        {
+            "fund_code": "A",
+            "signal_type": "reduce",
+            "reasons": [{"layer": "performance", "rule": "excess_return_1y", "detail": "差"}],
+            "detail": "差",
+        }
+    ]
+    results = aggregate_signals(
+        rebalance,
+        [],
+        performance,
+        {"A": "stock", "B": "stock"},
+        market_value_by_code={"A": 100.0, "B": 1000.0},
+        total_value=10000.0,
+        category_targets={"stock": 0.5},
+        intra_category_mode="equal",
+    )
+    by_code = {item["fund_code"]: item for item in results if item["fund_code"]}
+    assert by_code["A"]["suggested_amount"] == 0.0
+    assert by_code["B"]["suggested_amount"] > 0
+
+
+def test_weak_rebalance_add_downgrades_when_purchase_limit_blocks():
+    signal = {
+        "fund_code": "012922",
+        "signal_type": "add",
+        "score": 18.3,
+        "strength": 2,
+        "suggested_amount": 1703.0,
+        "reasons": [
+            {
+                "layer": "rebalance",
+                "rule": "category_underweight",
+                "detail": "股票型低配 9.1%，建议增配 ¥52806",
+            }
+        ],
+    }
+    purchase_info = parse_purchase_record(
+        {
+            "purchase_status": "限大额",
+            "purchase_min_amount": 10.0,
+            "daily_purchase_limit": 20.0,
+        }
+    )
+
+    updated = apply_purchase_limits_to_signal(signal, purchase_info)
+
+    assert updated["signal_type"] == "watch"
+    assert updated["suggested_amount"] == 20.0
+
+
 def test_aggregate_signals_merges_layers():
     rebalance = [
         {
@@ -110,7 +239,16 @@ def test_aggregate_signals_merges_layers():
     ]
     fund_categories = {"110011": "stock", "000001": "bond"}
 
-    results = aggregate_signals(rebalance, concentration, performance, fund_categories)
+    results = aggregate_signals(
+        rebalance,
+        concentration,
+        performance,
+        fund_categories,
+        market_value_by_code={"110011": 5000.0, "000001": 1000.0},
+        total_value=6000.0,
+        category_targets={"stock": 0.4, "bond": 0.3, "money": 0.15, "qdii": 0.1, "other": 0.05},
+        intra_category_mode="equal",
+    )
     by_code = {item["fund_code"]: item for item in results if item["fund_code"]}
 
     assert by_code["110011"]["signal_type"] == "reduce"
@@ -158,6 +296,7 @@ def test_api_signals_sorted_by_score(monkeypatch):
 
     monkeypatch.setattr("app.services.data_sync.fetch_nav_from_akshare", fake_fetch)
     monkeypatch.setattr("app.services.data_sync.fetch_metadata_from_akshare", fake_metadata)
+    monkeypatch.setattr("app.services.data_sync.fetch_purchase_limits_from_akshare", lambda: {})
 
     payload = {
         "holdings": [

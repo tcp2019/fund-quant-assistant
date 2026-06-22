@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
+import AllocationChart from '../components/AllocationChart'
+import ConcentrationCard from '../components/ConcentrationCard'
 import HoldingsTable from '../components/HoldingsTable'
 import StatCard from '../components/StatCard'
+import ThemeExposurePanel from '../components/ThemeExposurePanel'
 import type { Overview } from '../types'
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('zh-CN', {
-    style: 'currency',
-    currency: 'CNY',
-    maximumFractionDigits: 2,
-  }).format(value)
-}
-
-function formatPercent(value: number) {
-  return `${(value * 100).toFixed(2)}%`
-}
+import { formatCurrency, formatProfitAmount, formatSignedPercent } from '../utils/format'
 
 export default function Dashboard() {
   const [overview, setOverview] = useState<Overview | null>(null)
@@ -88,6 +80,7 @@ export default function Dashboard() {
         <h2 className="text-2xl font-semibold text-slate-900">组合总览</h2>
         <p className="mt-1 text-sm text-slate-500">
           快照 #{overview.snapshot_id ?? '—'} · 共 {overview.holdings.length} 只基金
+          {overview.data_as_of_date ? ` · 净值截至 ${overview.data_as_of_date}` : ''}
         </p>
       </div>
 
@@ -96,16 +89,45 @@ export default function Dashboard() {
         <StatCard title="总成本" value={formatCurrency(overview.total_cost)} />
         <StatCard
           title="总盈亏"
-          value={formatCurrency(overview.total_profit)}
-          subtitle={formatPercent(overview.total_profit_rate)}
+          value={formatProfitAmount(overview.total_profit)}
+          subtitle={formatSignedPercent(overview.total_profit_rate)}
           tone={profitTone}
         />
         <StatCard
           title="收益率"
-          value={formatPercent(overview.total_profit_rate)}
+          value={formatSignedPercent(overview.total_profit_rate)}
           tone={profitTone}
         />
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-900">大类配置</h3>
+          <p className="mt-1 text-sm text-slate-500">按基金名称与类型自动分类</p>
+          <div className="mt-4">
+            <AllocationChart allocation={overview.category_allocation ?? []} />
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-900">主题暴露</h3>
+          <p className="mt-1 text-sm text-slate-500">存储/CPO/半导体等赛道占比</p>
+          <div className="mt-4">
+            <ThemeExposurePanel allocation={overview.theme_allocation ?? []} />
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-base font-semibold text-slate-900">集中度 Top5</h3>
+        <p className="mt-1 text-sm text-slate-500">单只权重过高可能触发减仓信号</p>
+        <div className="mt-4">
+          <ConcentrationCard
+            topHoldings={overview.top_holdings ?? []}
+            concentrationTop5Pct={overview.concentration_top5_pct ?? 0}
+          />
+        </div>
+      </section>
 
       <HoldingsTable holdings={overview.holdings} />
     </div>

@@ -1,11 +1,14 @@
 import type {
   CorrelationOut,
   DataSyncResult,
+  FundSearchOut,
   OcrConfirmResponse,
   OcrUploadResponse,
   RiskOut,
   SignalsListOut,
   StrategyConfig,
+  ThemeCandidatesOut,
+  ThemeOption,
 } from '../types'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -113,10 +116,34 @@ export async function updateStrategy(body: {
   template_name: string
   target_weights?: Record<string, number>
   thresholds?: StrategyConfig['thresholds']
+  intra_category_mode?: StrategyConfig['intra_category_mode']
+  fund_target_weights?: Record<string, number>
 }): Promise<StrategyConfig> {
   return api.put<StrategyConfig>('/api/settings/strategy', body)
 }
 
 export async function syncData(): Promise<DataSyncResult> {
   return api.post<DataSyncResult>('/api/data/sync', {})
+}
+
+export async function searchFunds(query: string, limit = 8): Promise<FundSearchOut> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  return api.get<FundSearchOut>(`/api/funds/search?${params.toString()}`)
+}
+
+export async function refreshFundCatalog(): Promise<{ count: number }> {
+  return api.post<{ count: number }>('/api/funds/catalog/refresh', {})
+}
+
+export async function fetchThemes(): Promise<ThemeOption[]> {
+  return api.get<ThemeOption[]>('/api/funds/themes')
+}
+
+export async function fetchThemeCandidates(
+  themeId: string,
+  sortBy = 'return_1m',
+  limit = 5,
+): Promise<ThemeCandidatesOut> {
+  const params = new URLSearchParams({ sort_by: sortBy, limit: String(limit) })
+  return api.get<ThemeCandidatesOut>(`/api/funds/themes/${themeId}/candidates?${params.toString()}`)
 }

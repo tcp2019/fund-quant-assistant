@@ -1,3 +1,8 @@
+export interface HoldingTheme {
+  theme: string
+  label: string
+}
+
 export interface Holding {
   fund_code: string
   fund_name: string
@@ -9,6 +14,7 @@ export interface Holding {
   platform: string
   hold_days: number | null
   weight_pct: number
+  themes?: HoldingTheme[]
 }
 
 export interface Overview {
@@ -18,6 +24,25 @@ export interface Overview {
   total_profit: number
   total_profit_rate: number
   holdings: Holding[]
+  category_allocation: CategoryAllocation[]
+  theme_allocation?: ThemeAllocation[]
+  top_holdings: Holding[]
+  concentration_top5_pct: number
+  data_as_of_date?: string | null
+}
+
+export interface CategoryAllocation {
+  category: string
+  label: string
+  weight_pct: number
+  market_value: number
+}
+
+export interface ThemeAllocation {
+  theme: string
+  label: string
+  weight_pct: number
+  market_value: number
 }
 
 export interface SnapshotSummary {
@@ -43,6 +68,7 @@ export interface ParsedHolding {
   profit_rate: number
   platform: string
   confidence?: number
+  warnings?: string[]
 }
 
 export interface OcrUploadResponse {
@@ -53,6 +79,40 @@ export interface OcrUploadResponse {
 
 export interface OcrConfirmResponse {
   snapshot_id: number
+}
+
+export interface FundSearchResult {
+  fund_code: string
+  fund_name: string
+  fund_type: string
+}
+
+export interface FundSearchOut {
+  results: FundSearchResult[]
+  catalog_ready: boolean
+}
+
+export interface FundCandidate {
+  fund_code: string
+  fund_name: string
+  category: string
+  return_1y: number | null
+  return_1m: number | null
+  return_1w: number | null
+  as_of_date: string
+  data_source: string
+}
+
+export interface ThemeCandidatesOut {
+  theme: string
+  label: string
+  sort_by: string
+  candidates: FundCandidate[]
+}
+
+export interface ThemeOption {
+  theme: string
+  label: string
 }
 
 export interface SignalReason {
@@ -76,6 +136,7 @@ export interface Signal {
   reasons: SignalReason[]
   suggested_amount: number
   created_at: string
+  candidates?: FundCandidate[]
 }
 
 export interface SignalsListOut {
@@ -107,6 +168,8 @@ export interface StrategyConfig {
     single_fund_max_pct: number
     correlation_max: number
   }
+  intra_category_mode: 'equal' | 'pro_rata' | 'custom'
+  fund_target_weights: Record<string, number>
 }
 
 export interface DataSyncResult {
@@ -119,4 +182,6 @@ export interface DataSyncResult {
     error?: string
   }>
   signals_count?: number
+  revalued?: number
+  as_of_date?: string | null
 }

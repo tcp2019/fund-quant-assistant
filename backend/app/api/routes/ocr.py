@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +24,7 @@ from app.services.ocr.pipeline import parse_ocr_text, run_paddle_ocr, validate_h
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
 
-def _to_holding_out(row) -> ParsedHoldingOut:
+def _to_holding_out(row, row_warnings: list[str] | None = None) -> ParsedHoldingOut:
     return ParsedHoldingOut(
         fund_code=row.fund_code,
         fund_name=row.fund_name,
@@ -34,6 +35,7 @@ def _to_holding_out(row) -> ParsedHoldingOut:
         profit_rate=row.profit_rate,
         platform=row.platform,
         confidence=row.confidence,
+        warnings=row_warnings or [],
     )
 
 
@@ -44,8 +46,9 @@ def _build_upload_response(
     warnings: list[str] = []
     holdings = []
     for row in rows:
-        warnings.extend(validate_holding(row))
-        holdings.append(_to_holding_out(row))
+        row_warnings = validate_holding(row)
+        warnings.extend(row_warnings)
+        holdings.append(_to_holding_out(row, row_warnings))
 
     job = OcrJob(
         status="parsed" if rows else "failed",
@@ -78,9 +81,12 @@ async def upload(request: Request, session: Session = Depends(get_db)):
         dest.write_bytes(await upload_file.read())
 
         try:
-            text = run_paddle_ocr(str(dest))
+            # Paddle inference is CPU-heavy and must not run on the asyncio event loop.
+            text = await asyncio.to_thread(run_paddle_ocr, str(dest))
         except ImportError as exc:
             raise HTTPException(status_code=501, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"OCR failed: {exc}") from exc
 
         return _build_upload_response(text, platform_hint, session)
 

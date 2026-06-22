@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.funds import FundCandidateOut
+
 
 class SignalReason(BaseModel):
     layer: str
@@ -24,6 +26,7 @@ class SignalOut(BaseModel):
     reasons: list[SignalReason]
     suggested_amount: float
     created_at: datetime
+    candidates: list[FundCandidateOut] = []
 
 
 class SignalsListOut(BaseModel):

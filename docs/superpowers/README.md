@@ -40,4 +40,6 @@ docs/superpowers/
 
 | 功能 | 当前 Spec | 当前 Plan | 历史 |
 |------|-----------|-----------|------|
-| 基金量化助手（Fund Quant Assistant） | [2026-06-21-fund-quant-assistant-design.md](specs/active/2026-06-21-fund-quant-assistant-design.md) | [2026-06-21-fund-quant-assistant.md](plans/completed/2026-06-21-fund-quant-assistant.md) | — |
+| 基金量化助手（Fund Quant Assistant） | [2026-06-21-fund-quant-assistant-design.md](specs/active/2026-06-21-fund-quant-assistant-design.md) | — | [v1](plans/completed/2026-06-21-fund-quant-assistant.md) · [v1.0.1](plans/completed/2026-06-21-alipay-ocr-formats.md) · [v1.1](plans/completed/2026-06-21-v11-dashboard-import-pipeline.md) |
+| v1.2 候选/搜索/通知 | [2026-06-21-v12-recommendations-notifications-design.md](specs/active/2026-06-21-v12-recommendations-notifications-design.md) | — | [plan](plans/completed/2026-06-21-v12-recommendations-notifications.md) |
+| v1.3 类内增配分配 | [2026-06-22-intra-category-rebalance-allocation-design.md](specs/active/2026-06-22-intra-category-rebalance-allocation-design.md) | — | [plan](plans/completed/2026-06-22-intra-category-rebalance-allocation.md) |

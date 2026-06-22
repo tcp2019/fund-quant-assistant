@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 DEFAULT_TEMPLATES = {
@@ -32,6 +34,9 @@ DEFAULT_THRESHOLDS = {
 }
 
 
+IntraCategoryMode = Literal["equal", "pro_rata", "custom"]
+
+
 class StrategyThresholds(BaseModel):
     rebalance_deviation_pct: float = Field(default=5.0, ge=0.1, le=50.0)
     rebalance_force_days: float = Field(default=365, ge=1, le=3650)
@@ -43,9 +48,13 @@ class StrategyOut(BaseModel):
     template_name: str
     target_weights: dict[str, float]
     thresholds: dict[str, float]
+    intra_category_mode: str = "equal"
+    fund_target_weights: dict[str, float] = Field(default_factory=dict)
 
 
 class StrategyUpdateIn(BaseModel):
     template_name: str
     target_weights: dict[str, float] | None = None
     thresholds: StrategyThresholds | None = None
+    intra_category_mode: IntraCategoryMode | None = None
+    fund_target_weights: dict[str, float] | None = None
