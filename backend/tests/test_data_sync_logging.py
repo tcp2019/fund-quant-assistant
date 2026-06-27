@@ -54,7 +54,20 @@ def test_sync_writes_sync_log_on_success(session):
     _seed_metadata(session, "110011", "易方达优质精选")
     _seed_metadata(session, "000001", "测试基金A")
 
-    with patch("app.services.data_sync.fetch_nav_from_akshare") as mock_nav:
+    with patch(
+        "app.services.data_sync.fetch_metadata_from_akshare"
+    ) as mock_meta, patch(
+        "app.services.data_sync.fetch_purchase_limits_from_akshare"
+    ) as mock_limits, patch(
+        "app.services.data_sync.fetch_nav_from_akshare"
+    ) as mock_nav:
+        mock_meta.return_value = {
+            "name": "测试基金",
+            "fund_type": "混合型",
+            "manager": "测试经理",
+            "benchmark_code": "000300",
+        }
+        mock_limits.return_value = {}
         mock_nav.return_value = [{"date": "2026-01-01", "nav": 1.0, "acc_nav": 1.0}]
         result = sync_portfolio_funds(session)
 
@@ -71,7 +84,20 @@ def test_sync_log_records_nav_error(session):
     snap = _seed_holdings(session)
     _seed_metadata(session, "110011", "易方达优质精选")
 
-    with patch("app.services.data_sync.fetch_nav_from_akshare") as mock_nav:
+    with patch(
+        "app.services.data_sync.fetch_metadata_from_akshare"
+    ) as mock_meta, patch(
+        "app.services.data_sync.fetch_purchase_limits_from_akshare"
+    ) as mock_limits, patch(
+        "app.services.data_sync.fetch_nav_from_akshare"
+    ) as mock_nav:
+        mock_meta.return_value = {
+            "name": "测试基金",
+            "fund_type": "混合型",
+            "manager": "测试经理",
+            "benchmark_code": "000300",
+        }
+        mock_limits.return_value = {}
         mock_nav.side_effect = RuntimeError("AKShare rate limited")
         result = sync_portfolio_funds(session)
 
