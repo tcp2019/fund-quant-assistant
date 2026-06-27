@@ -5,12 +5,14 @@ import {
   fetchCorrelation,
   fetchHoldings,
   fetchHotThemes,
+  fetchMacroIndicators,
   fetchOpportunities,
   fetchOverview,
   fetchRisk,
   fetchSignals,
   fetchSnapshots,
   fetchStrategy,
+  fetchStyleExposure,
   fetchSyncLogs,
   queryKeys,
   syncData,
@@ -91,6 +93,14 @@ export function useSyncLogs(limit = 3) {
     queryKey: queryKeys.syncLogs,
     queryFn: () => fetchSyncLogs(limit),
   })
+}
+
+export function useStyleExposure() {
+  return useQuery({ queryKey: queryKeys.styleExposure, queryFn: fetchStyleExposure })
+}
+
+export function useMacroIndicators() {
+  return useQuery({ queryKey: queryKeys.macro, queryFn: fetchMacroIndicators })
 }
 
 // ── Mutations ──

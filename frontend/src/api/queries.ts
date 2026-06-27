@@ -35,6 +35,8 @@ export const queryKeys = {
   themes: ['themes'] as const,
   themeCandidates: (themeId: string, sortBy: string, limit: number) =>
     ['themeCandidates', themeId, sortBy, limit] as const,
+  styleExposure: ['styleExposure'] as const,
+  macro: ['macro'] as const,
 }
 
 // ── Query Functions ──
@@ -62,6 +64,14 @@ export { fetchThemeCandidates }
 
 export async function fetchSnapshots() {
   return api.get<import('../types').SnapshotsListOut>('/api/portfolio/snapshots')
+}
+
+export async function fetchStyleExposure() {
+  return api.get<import('../types').StyleExposure>('/api/analysis/style-exposure')
+}
+
+export async function fetchMacroIndicators() {
+  return api.get<import('../types').MacroIndicators>('/api/analysis/macro')
 }
 
 export async function fetchSyncLogs(limit = 3) {

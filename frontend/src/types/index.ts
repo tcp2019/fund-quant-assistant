@@ -272,3 +272,17 @@ export interface SyncLogEntry {
   failed_funds: number
   errors_json: string
 }
+
+export interface StyleExposure {
+  size_exposure: Record<string, number>
+  style_exposure: Record<string, number>
+  snapshot_id: number | null
+}
+
+export interface MacroIndicators {
+  bond_10y: number | null
+  bond_10y_trend: string
+  shibor_overnight: number | null
+  environment: string
+  available: boolean
+}
