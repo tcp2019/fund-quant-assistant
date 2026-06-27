@@ -4,7 +4,7 @@ from typing import Any
 import akshare as ak
 from sqlmodel import Session, select
 
-from app.db.models import FundMetadata, FundNavHistory, Holding
+from app.db.models import FundMetadata, FundNavHistory, Holding, SyncLog
 from app.repositories.portfolio import get_latest_snapshot
 from app.services.fund_classifier import classify_fund
 from app.services.fund_themes import detect_themes
@@ -188,6 +188,8 @@ def sync_fund_metadata(
 
 
 def sync_portfolio_funds(session: Session) -> dict[str, Any]:
+    from datetime import datetime
+
     snap = get_latest_snapshot(session)
     if not snap:
         return {"synced": 0, "codes": [], "details": []}
@@ -198,20 +200,37 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
     codes = sorted({h.fund_code for h in holdings})
     name_by_code = {h.fund_code: h.fund_name for h in holdings}
 
+    sync_log = SyncLog(
+        started_at=datetime.utcnow(),
+        status="running",
+        total_funds=len(codes),
+        success_funds=0,
+        failed_funds=0,
+        errors_json="[]",
+    )
+    session.add(sync_log)
+    session.commit()
+
     details: list[dict[str, Any]] = []
     synced = 0
+    errors: list[dict[str, Any]] = []
 
+    # Per-fund metadata sync
     for code in codes:
         try:
             sync_fund_metadata(session, code, fallback_name=name_by_code.get(code, ""))
         except Exception as exc:
+            errors.append({"fund_code": code, "stage": "metadata", "error": str(exc)})
             details.append({"code": code, "status": "metadata_error", "error": str(exc)})
 
+    # Purchase limits (batch)
     try:
         sync_purchase_limits(session, codes)
     except Exception as exc:
+        errors.append({"fund_code": "*", "stage": "purchase_limits", "error": str(exc)})
         details.append({"code": "*", "status": "purchase_limits_error", "error": str(exc)})
 
+    # Per-fund NAV sync + metrics
     for code in codes:
         try:
             nav_rows = sync_fund_nav(session, code)
@@ -220,6 +239,7 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
                 _apply_peer_metrics(session, code)
                 session.commit()
             except Exception as exc:
+                errors.append({"fund_code": code, "stage": "peer_metrics", "error": str(exc)})
                 details.append({"code": code, "status": "peer_metrics_error", "error": str(exc)})
             details.append(
                 {
@@ -231,13 +251,30 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
             )
             synced += 1
         except Exception as exc:
+            errors.append({"fund_code": code, "stage": "nav", "error": str(exc)})
             details.append({"code": code, "status": "error", "error": str(exc)})
 
     revalue = revalue_holdings(session, snap.id)
+
+    # Update SyncLog
+    sync_log.finished_at = datetime.utcnow()
+    sync_log.success_funds = synced
+    sync_log.failed_funds = len(codes) - synced
+    sync_log.errors_json = json.dumps(errors, ensure_ascii=False)
+    if synced == len(codes) and len(errors) == 0:
+        sync_log.status = "done"
+    elif synced > 0:
+        sync_log.status = "partial"
+    else:
+        sync_log.status = "failed"
+    session.add(sync_log)
+    session.commit()
+
     return {
         "synced": synced,
         "codes": codes,
         "details": details,
         "revalued": revalue["updated"],
         "as_of_date": revalue["as_of_date"],
+        "sync_log_id": sync_log.id,
     }
