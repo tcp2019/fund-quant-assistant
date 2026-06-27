@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.api.deps import get_db
-from app.db.models import StrategyConfig
+from app.db.models import StrategyConfig, SyncLog
 from app.schemas.settings import (
     DEFAULT_TEMPLATES,
     DEFAULT_THRESHOLDS,
     StrategyOut,
     StrategyUpdateIn,
+    SyncLogOut,
+    SyncLogsListOut,
 )
 from app.services.signals.engine import run_signal_engine
 
@@ -120,3 +122,27 @@ def update_strategy(payload: StrategyUpdateIn, session: Session = Depends(get_db
 
     run_signal_engine(session)
     return _config_to_out(config)
+
+
+@router.get("/sync-logs", response_model=SyncLogsListOut)
+def list_sync_logs(limit: int = 3, session: Session = Depends(get_db)):
+    logs = session.exec(
+        select(SyncLog)
+        .order_by(SyncLog.id.desc())
+        .limit(limit)
+    ).all()
+    return SyncLogsListOut(
+        logs=[
+            SyncLogOut(
+                id=log.id,
+                started_at=log.started_at,
+                finished_at=log.finished_at,
+                status=log.status,
+                total_funds=log.total_funds,
+                success_funds=log.success_funds,
+                failed_funds=log.failed_funds,
+                errors_json=log.errors_json,
+            )
+            for log in logs
+        ]
+    )

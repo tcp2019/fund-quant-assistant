@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -62,3 +63,18 @@ class StrategyUpdateIn(BaseModel):
     thresholds: StrategyThresholds | None = None
     intra_category_mode: IntraCategoryMode | None = None
     fund_target_weights: dict[str, float] | None = None
+
+
+class SyncLogOut(BaseModel):
+    id: int
+    started_at: datetime
+    finished_at: datetime | None = None
+    status: str
+    total_funds: int
+    success_funds: int
+    failed_funds: int
+    errors_json: str
+
+
+class SyncLogsListOut(BaseModel):
+    logs: list[SyncLogOut]
