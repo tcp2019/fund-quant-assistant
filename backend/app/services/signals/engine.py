@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlmodel import Session, select
 
-from app.db.models import FundMetadata, FundMetricsCache, Holding, SignalRecord, StrategyConfig
+from app.db.models import FundMetadata, FundMetricsCache, FundNavHistory, Holding, SignalRecord, StrategyConfig
 from app.repositories.portfolio import get_latest_snapshot
 from app.schemas.settings import DEFAULT_TEMPLATES, DEFAULT_THRESHOLDS
 from app.services.analysis import compute_correlation
@@ -13,6 +13,12 @@ from app.services.signals.concentration import compute_concentration_signals
 from app.services.signals.consolidation import compute_consolidation_signals
 from app.services.signals.min_trade import apply_min_trade_to_signals
 from app.services.signals.performance import compute_performance_signals
+from app.services.signals.performance_metrics import (
+    calmar_ratio,
+    downside_capture,
+    info_ratio,
+    rolling_sharpe,
+)
 from app.services.signals.rebalance import CATEGORY_LABELS, compute_rebalance_review_signals, compute_rebalance_signals
 from app.services.fund_purchase_limits import apply_purchase_limits_to_signals, purchase_info_from_metadata
 from app.services.signals.intra_category import (
@@ -541,6 +547,23 @@ def _load_metrics(session: Session, fund_codes: list[str]) -> dict[str, dict]:
             "max_drawdown_1y": cache.max_drawdown_1y,
             "peer_return_percentile_3m": cache.peer_return_percentile_3m,
         }
+
+        # Compute new performance indicators from NAV history
+        metrics = metrics_by_code[code]
+        nav_rows = session.exec(
+            select(FundNavHistory)
+            .where(FundNavHistory.code == code)
+            .order_by(FundNavHistory.date.asc())
+        ).all()
+
+        if len(nav_rows) >= 60:
+            navs = [row.acc_nav if row.acc_nav > 0 else row.nav for row in nav_rows]
+            from app.services.metrics import daily_returns_from_navs
+            returns = daily_returns_from_navs(navs)
+            if len(returns) >= 60:
+                metrics["rolling_sharpe"] = round(rolling_sharpe(returns), 4)
+                metrics["calmar"] = round(calmar_ratio(navs), 4)
+
     return metrics_by_code
 
 
