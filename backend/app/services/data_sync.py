@@ -1,8 +1,11 @@
 import json
+import logging
 from typing import Any
 
 import akshare as ak
 from sqlmodel import Session, select
+
+logger = logging.getLogger(__name__)
 
 from app.db.models import FundMetadata, FundNavHistory, Holding, SyncLog
 from app.repositories.portfolio import get_latest_snapshot
@@ -102,8 +105,57 @@ def sync_purchase_limits(session: Session, codes: list[str]) -> int:
     return updated
 
 
+NAV_DAILY_CHANGE_THRESHOLD = 0.15  # 日涨跌超过 15% 视为异常
+
+
+def detect_nav_jump(navs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """检测净值跳变，返回异常日期列表（通常是分红/拆分未复权，或数据源异常）。"""
+    if len(navs) < 2:
+        return []
+
+    sorted_navs = sorted(navs, key=lambda x: x["date"])
+    anomalies: list[dict[str, Any]] = []
+
+    for i in range(1, len(sorted_navs)):
+        prev_nav = sorted_navs[i - 1]["nav"]
+        curr_nav = sorted_navs[i]["nav"]
+        if prev_nav <= 0:
+            continue
+        change = abs(curr_nav / prev_nav - 1)
+        if change > NAV_DAILY_CHANGE_THRESHOLD:
+            anomalies.append(
+                {
+                    "date": sorted_navs[i]["date"],
+                    "prev_nav": prev_nav,
+                    "curr_nav": curr_nav,
+                    "change_pct": round(change * 100, 2),
+                    "likely_reason": "可能是分红/拆分未复权，或数据源异常",
+                }
+            )
+
+    return anomalies
+
+
 def sync_fund_nav(session: Session, code: str) -> int:
+    latest = session.exec(
+        select(FundNavHistory.date)
+        .where(FundNavHistory.code == code)
+        .order_by(FundNavHistory.date.desc())
+    ).first()
+
     rows = fetch_nav_from_akshare(code)
+
+    if latest:
+        rows = [row for row in rows if row["date"] > latest]
+
+    jump_anomalies = detect_nav_jump(rows)
+    if jump_anomalies:
+        logger.warning(
+            "NAV jump detected for %s: %d anomalies",
+            code,
+            len(jump_anomalies),
+        )
+
     synced = 0
     for row in rows:
         existing = session.exec(
