@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, fetchOpportunities } from '../api/client'
+import { useOpportunities, useSyncData } from '../api/hooks'
 import ActionList from '../components/ActionList'
 import StructuralAlerts from '../components/StructuralAlerts'
-import type { FundCandidate, HotTheme, OpportunitiesOut } from '../types'
+import type { FundCandidate, HotTheme } from '../types'
 
 type TabKey = 'actions' | 'themes'
 
@@ -69,57 +68,35 @@ export default function OpportunitiesPage() {
   const tabParam = searchParams.get('tab')
   const activeTab: TabKey = tabParam === 'themes' ? 'themes' : 'actions'
 
-  const [data, setData] = useState<OpportunitiesOut | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const loadOpportunities = useCallback(async () => {
-    try {
-      const result = await fetchOpportunities({
-        sell_limit: 10,
-        buy_limit: 10,
-        explore_limit: 10,
-        theme_limit: 9,
-      })
-      setData(result)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadOpportunities()
-  }, [loadOpportunities])
+  const { data, isLoading, error, refetch } = useOpportunities({
+    sell_limit: 10,
+    buy_limit: 10,
+    explore_limit: 10,
+    theme_limit: 9,
+  })
+  const syncMutation = useSyncData()
 
   function setTab(tab: TabKey) {
     setSearchParams({ tab })
   }
 
   async function handleSync() {
-    setSyncing(true)
-    setError(null)
     try {
-      await api.post('/api/data/sync', {})
-      await loadOpportunities()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '同步失败')
-    } finally {
-      setSyncing(false)
+      await syncMutation.mutateAsync()
+      await refetch()
+    } catch {
+      // error is tracked via syncMutation.isError
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return <p className="text-slate-500">加载中...</p>
   }
 
   if (error && !data) {
     return (
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        无法加载机会数据：{error}
+        无法加载机会数据：{error instanceof Error ? error.message : '未知错误'}
       </div>
     )
   }
@@ -154,9 +131,11 @@ export default function OpportunitiesPage() {
         </p>
       </div>
 
-      {error ? (
+      {(syncMutation.isError || error) ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
+          {syncMutation.isError
+            ? (syncMutation.error instanceof Error ? syncMutation.error.message : '同步失败')
+            : (error instanceof Error ? error.message : '未知错误')}
         </div>
       ) : null}
 
@@ -174,10 +153,10 @@ export default function OpportunitiesPage() {
             <button
               type="button"
               onClick={handleSync}
-              disabled={syncing}
+              disabled={syncMutation.isPending}
               className="inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {syncing ? '同步中...' : '同步数据'}
+              {syncMutation.isPending ? '同步中...' : '同步数据'}
             </button>
           </div>
         </div>
