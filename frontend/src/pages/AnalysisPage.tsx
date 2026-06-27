@@ -4,13 +4,16 @@ import {
   useBacktestSensitivity,
   useBacktestSnapshotStats,
   useCorrelation,
+  useMacroIndicators,
   useOverview,
   useRisk,
+  useStyleExposure,
 } from '../api/hooks'
 import { fetchThemeCandidates, fetchThemes, queryKeys } from '../api/queries'
 import BacktestPanel from '../components/BacktestPanel'
 import StatCard from '../components/StatCard'
 import ThemeExposurePanel from '../components/ThemeExposurePanel'
+import WhatIfPanel from '../components/WhatIfPanel'
 import type { CorrelationOut } from '../types'
 
 function formatPercent(value: number, digits = 2) {
@@ -96,6 +99,8 @@ export default function AnalysisPage() {
     data: overview,
     error: overviewError,
   } = useOverview()
+  const { data: styleExposure } = useStyleExposure()
+  const { data: macro } = useMacroIndicators()
   const {
     data: themes = [],
     error: themesError,
@@ -180,6 +185,23 @@ export default function AnalysisPage() {
           {error}
         </div>
       ) : null}
+
+      {macro?.available && (
+        <div className={`rounded-lg border px-4 py-3 text-sm ${
+          macro.environment === 'tight' ? 'border-rose-200 bg-rose-50 text-rose-800' :
+          macro.environment === 'loose' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' :
+          'border-slate-200 bg-slate-50 text-slate-700'
+        }`}>
+          <span className="font-medium">宏观环境：</span>
+          {macro.environment === 'tight' && '偏紧 —— 利率上行，Shibor高位，建议关注短久期债基'}
+          {macro.environment === 'loose' && '偏松 —— 利率下行，Shibor低位，风险资产友好'}
+          {macro.environment === 'neutral' && '中性 —— 利率稳定'}
+          <span className="ml-4 text-xs opacity-70">
+            10Y国债 {macro.bond_10y}% {macro.bond_10y_trend === 'rising' ? '↑' : macro.bond_10y_trend === 'falling' ? '↓' : '→'} | 隔夜Shibor {macro.shibor_overnight}%
+          </span>
+        </div>
+      )}
+
       <div>
         <h2 className="text-2xl font-semibold text-slate-900">组合分析</h2>
         <p className="mt-1 text-sm text-slate-500">
@@ -245,6 +267,33 @@ export default function AnalysisPage() {
         </p>
       </section>
 
+      {styleExposure?.snapshot_id !== null && styleExposure?.snapshot_id !== undefined && (
+        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-medium text-slate-900">风格暴露</h3>
+          <p className="mt-1 text-sm text-slate-500">基于基金名称关键词自动分类</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <h4 className="text-sm font-medium text-slate-700 mb-2">规模暴露</h4>
+              {Object.entries(styleExposure.size_exposure).map(([key, val]) => (
+                <div key={key} className="flex justify-between text-sm">
+                  <span className="text-slate-600">{{large_cap: '大盘', small_cap: '小盘', balanced: '均衡'}[key] || key}</span>
+                  <span className="font-mono text-slate-900">{val.toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-slate-700 mb-2">风格暴露</h4>
+              {Object.entries(styleExposure.style_exposure).map(([key, val]) => (
+                <div key={key} className="flex justify-between text-sm">
+                  <span className="text-slate-600">{{value: '价值', growth: '成长', balanced: '均衡'}[key] || key}</span>
+                  <span className="font-mono text-slate-900">{val.toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-medium text-slate-900">规则回测与校验</h3>
         {backtestError ? (
@@ -254,6 +303,8 @@ export default function AnalysisPage() {
           <BacktestPanel sensitivity={sensitivity ?? null} snapshotStats={snapshotStats ?? null} />
         </div>
       </section>
+
+      <WhatIfPanel overview={overview ?? null} />
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-medium text-slate-900">收益相关性</h3>
