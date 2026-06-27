@@ -1,17 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { api, fetchBacktestSensitivity, fetchBacktestSnapshotStats, fetchThemeCandidates, fetchThemes } from '../api/client'
+import {
+  useBacktestSensitivity,
+  useBacktestSnapshotStats,
+  useCorrelation,
+  useOverview,
+  useRisk,
+} from '../api/hooks'
+import { fetchThemeCandidates, fetchThemes, queryKeys } from '../api/queries'
 import BacktestPanel from '../components/BacktestPanel'
 import StatCard from '../components/StatCard'
 import ThemeExposurePanel from '../components/ThemeExposurePanel'
-import type {
-  CorrelationOut,
-  RiskOut,
-  SensitivityReport,
-  SnapshotStatsOut,
-  ThemeAllocation,
-  ThemeOption,
-} from '../types'
+import type { CorrelationOut } from '../types'
 
 function formatPercent(value: number, digits = 2) {
   return `${(value * 100).toFixed(digits)}%`
@@ -74,69 +74,73 @@ function CorrelationHeatmap({ data }: { data: CorrelationOut }) {
 }
 
 export default function AnalysisPage() {
-  const [correlation, setCorrelation] = useState<CorrelationOut | null>(null)
-  const [risk, setRisk] = useState<RiskOut | null>(null)
-  const [themeAllocation, setThemeAllocation] = useState<ThemeAllocation[]>([])
-  const [themes, setThemes] = useState<ThemeOption[]>([])
-  const [sensitivity, setSensitivity] = useState<SensitivityReport | null>(null)
-  const [snapshotStats, setSnapshotStats] = useState<SnapshotStatsOut | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    data: correlation,
+    isLoading: corrLoading,
+    error: corrError,
+  } = useCorrelation()
+  const {
+    data: risk,
+    isLoading: riskLoading,
+    error: riskError,
+  } = useRisk()
+  const {
+    data: sensitivity,
+    error: sensError,
+  } = useBacktestSensitivity()
+  const {
+    data: snapshotStats,
+    error: statsError,
+  } = useBacktestSnapshotStats()
+  const {
+    data: overview,
+    error: overviewError,
+  } = useOverview()
+  const {
+    data: themes = [],
+    error: themesError,
+  } = useQuery({
+    queryKey: queryKeys.themes,
+    queryFn: fetchThemes,
+  })
 
-  useEffect(() => {
-    let cancelled = false
+  const loading = corrLoading || riskLoading
 
-    async function loadAnalysis() {
-      try {
-        const [corrData, riskData, overview, themeList, sensitivityData, statsData] =
-          await Promise.all([
-          api.get<CorrelationOut>('/api/analysis/correlation'),
-          api.get<RiskOut>('/api/analysis/risk'),
-          api.get<{ theme_allocation?: ThemeAllocation[] }>('/api/portfolio/overview'),
-          fetchThemes(),
-          fetchBacktestSensitivity(),
-          fetchBacktestSnapshotStats(),
-        ])
-        if (!cancelled) {
-          setCorrelation(corrData)
-          setRisk(riskData)
-          setThemeAllocation(overview.theme_allocation ?? [])
-          setThemes(themeList)
-          setSensitivity(sensitivityData)
-          setSnapshotStats(statsData)
-          setError(null)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : '加载失败')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
+  const themeAllocation = overview?.theme_allocation ?? []
 
-    void loadAnalysis()
+  // Compose error state mirroring the original allSettled logic
+  const errorMessages: string[] = []
+  if (corrError) errorMessages.push('相关性')
+  if (riskError) errorMessages.push('风险指标')
+  if (overviewError) errorMessages.push('主题暴露')
+  if (themesError) errorMessages.push('主题列表')
 
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  let error: string | null = null
+  if (errorMessages.length === 4) {
+    const firstErr = corrError || riskError || overviewError || themesError
+    error = firstErr instanceof Error ? firstErr.message : '加载失败'
+  } else if (errorMessages.length > 0) {
+    error = `部分数据加载失败：${errorMessages.join('、')}`
+  }
+
+  const backtestError =
+    sensError || statsError
+      ? '回测数据暂不可用，请确认后端已更新并重启服务'
+      : null
 
   if (loading) {
     return <p className="text-slate-500">加载中...</p>
   }
 
-  if (error) {
+  const hasSnapshot = correlation?.snapshot_id !== null
+
+  if (error && !hasSnapshot) {
     return (
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
         无法加载分析数据：{error}
       </div>
     )
   }
-
-  const hasSnapshot = correlation?.snapshot_id !== null
 
   if (!hasSnapshot) {
     return (
@@ -171,6 +175,11 @@ export default function AnalysisPage() {
 
   return (
     <div className="space-y-6">
+      {error ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error}
+        </div>
+      ) : null}
       <div>
         <h2 className="text-2xl font-semibold text-slate-900">组合分析</h2>
         <p className="mt-1 text-sm text-slate-500">
@@ -238,8 +247,11 @@ export default function AnalysisPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-medium text-slate-900">规则回测与校验</h3>
+        {backtestError ? (
+          <p className="mt-4 text-sm text-amber-800">{backtestError}</p>
+        ) : null}
         <div className="mt-4">
-          <BacktestPanel sensitivity={sensitivity} snapshotStats={snapshotStats} />
+          <BacktestPanel sensitivity={sensitivity ?? null} snapshotStats={snapshotStats ?? null} />
         </div>
       </section>
 
