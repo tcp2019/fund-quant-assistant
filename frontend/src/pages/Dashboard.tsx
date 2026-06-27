@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useOverview, useOpportunities, useHotThemes } from '../api/hooks'
+import { useOverview, useOpportunities, useHotThemes, useSyncLogs } from '../api/hooks'
 import ActionSummaryCards from '../components/ActionSummaryCards'
 import AllocationChart from '../components/AllocationChart'
 import ConcentrationCard from '../components/ConcentrationCard'
@@ -20,6 +20,7 @@ export default function Dashboard() {
   const { data: hotThemes = [], isLoading: themesLoading } = useHotThemes({
     theme_limit: 5,
   })
+  const { data: syncLogsData } = useSyncLogs(1)
 
   if (loading) {
     return <p className="text-slate-500">加载中...</p>
@@ -53,6 +54,14 @@ export default function Dashboard() {
   const profitTone =
     overview.total_profit > 0 ? 'profit' : overview.total_profit < 0 ? 'loss' : 'default'
 
+  const lastSyncStatus = syncLogsData?.logs?.[0]?.status ?? null
+  const statusDot = lastSyncStatus ? {
+    done: { color: 'bg-emerald-400', label: '数据正常' },
+    partial: { color: 'bg-amber-400', label: '部分数据同步失败' },
+    failed: { color: 'bg-rose-400', label: '数据同步失败' },
+    running: { color: 'bg-blue-400', label: '同步进行中' },
+  }[lastSyncStatus] ?? null : null
+
   const opportunitiesWithThemes = opportunities
     ? { ...opportunities, hot_themes: hotThemes }
     : null
@@ -64,6 +73,12 @@ export default function Dashboard() {
         <p className="mt-1 text-sm text-slate-500">
           快照 #{overview.snapshot_id ?? '—'} · 共 {overview.holdings.length} 只基金
           {overview.data_as_of_date ? ` · 净值截至 ${overview.data_as_of_date}` : ''}
+          {statusDot && (
+            <span className="inline-flex items-center gap-1 ml-3" title={statusDot.label}>
+              <span className={`inline-block h-2 w-2 rounded-full ${statusDot.color}`} />
+              <span className="text-xs text-slate-400">{statusDot.label}</span>
+            </span>
+          )}
         </p>
       </div>
 
