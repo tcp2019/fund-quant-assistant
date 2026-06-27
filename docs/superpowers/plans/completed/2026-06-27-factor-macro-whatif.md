@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 
-> **Status:** active
+> **Status:** completed
 > **Created:** 2026-06-27
 > **Spec:** docs/superpowers/specs/active/2026-06-27-factor-macro-whatif-design.md
 > **Based on:** none
