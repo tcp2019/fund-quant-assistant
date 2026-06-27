@@ -62,24 +62,51 @@ export default function Dashboard() {
     running: { color: 'bg-blue-400', label: '同步进行中' },
   }[lastSyncStatus] ?? null : null
 
+  async function handleExportReport() {
+    try {
+      const response = await fetch('/api/report/weekly')
+      const text = await response.text()
+      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `fund-report-${new Date().toISOString().slice(0, 10)}.md`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // silently fail
+    }
+  }
+
   const opportunitiesWithThemes = opportunities
     ? { ...opportunities, hot_themes: hotThemes }
     : null
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-900">组合总览</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          快照 #{overview.snapshot_id ?? '—'} · 共 {overview.holdings.length} 只基金
-          {overview.data_as_of_date ? ` · 净值截至 ${overview.data_as_of_date}` : ''}
-          {statusDot && (
-            <span className="inline-flex items-center gap-1 ml-3" title={statusDot.label}>
-              <span className={`inline-block h-2 w-2 rounded-full ${statusDot.color}`} />
-              <span className="text-xs text-slate-400">{statusDot.label}</span>
-            </span>
-          )}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-slate-900">组合总览</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            快照 #{overview.snapshot_id ?? '—'} · 共 {overview.holdings.length} 只基金
+            {overview.data_as_of_date ? ` · 净值截至 ${overview.data_as_of_date}` : ''}
+            {statusDot && (
+              <span className="inline-flex items-center gap-1 ml-3" title={statusDot.label}>
+                <span className={`inline-block h-2 w-2 rounded-full ${statusDot.color}`} />
+                <span className="text-xs text-slate-400">{statusDot.label}</span>
+              </span>
+            )}
+          </p>
+        </div>
+        {overview && overview.holdings.length > 0 && (
+          <button
+            type="button"
+            onClick={handleExportReport}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+          >
+            📥 导出周报
+          </button>
+        )}
       </div>
 
       <ActionSummaryCards data={opportunitiesWithThemes} />
