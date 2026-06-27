@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { confirmOcr, fetchSignals, syncData, uploadOcr } from '../api/client'
+import { queryKeys } from '../api/queries'
 import FundSearchCombobox from '../components/FundSearchCombobox'
 import type { FundSearchResult, OcrPlatform, ParsedHolding } from '../types'
 import { maybeNotifyStrongSignals, summarizeStrongSignals } from '../utils/notifications'
@@ -73,14 +75,24 @@ function holdingsForConfirm(holdings: ParsedHolding[]): ParsedHolding[] {
 
 export default function ImportPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const uploadMutation = useMutation({ mutationFn: uploadOcr })
+  const confirmMutation = useMutation({
+    mutationFn: ({ jobId, holdings }: { jobId: number; holdings: any }) =>
+      confirmOcr(jobId, holdings),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.overview })
+      queryClient.invalidateQueries({ queryKey: queryKeys.holdings })
+    },
+  })
+
   const [platform, setPlatform] = useState<OcrPlatform>('alipay')
   const [text, setText] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [jobId, setJobId] = useState<number | null>(null)
   const [holdings, setHoldings] = useState<ParsedHolding[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
-  const [uploading, setUploading] = useState(false)
-  const [confirming, setConfirming] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [importedSnapshotId, setImportedSnapshotId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -103,9 +115,8 @@ export default function ImportPage() {
       return
     }
 
-    setUploading(true)
     try {
-      const result = await uploadOcr({
+      const result = await uploadMutation.mutateAsync({
         platform,
         text: text.trim(),
         file,
@@ -121,8 +132,6 @@ export default function ImportPage() {
     } catch (err) {
       resetImportFlow()
       setError(err instanceof Error ? err.message : '解析失败')
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -136,17 +145,17 @@ export default function ImportPage() {
       return
     }
 
-    setConfirming(true)
     setError(null)
     try {
-      const result = await confirmOcr(jobId, holdingsForConfirm(holdings))
+      const result = await confirmMutation.mutateAsync({
+        jobId,
+        holdings: holdingsForConfirm(holdings),
+      })
       setImportedSnapshotId(result.snapshot_id)
       setHoldings([])
       setWarnings([])
     } catch (err) {
       setError(err instanceof Error ? err.message : '确认导入失败')
-    } finally {
-      setConfirming(false)
     }
   }
 
@@ -217,6 +226,11 @@ export default function ImportPage() {
     )
   }
 
+  const displayError =
+    error ||
+    (uploadMutation.error instanceof Error ? uploadMutation.error.message : null) ||
+    (confirmMutation.error instanceof Error ? confirmMutation.error.message : null)
+
   return (
     <div className="space-y-6">
       <div>
@@ -279,18 +293,18 @@ export default function ImportPage() {
           />
         </div>
 
-        {error && (
+        {displayError && (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {error}
+            {displayError}
           </div>
         )}
 
         <button
           type="submit"
-          disabled={uploading}
+          disabled={uploadMutation.isPending}
           className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
-          {uploading ? '解析中...' : '解析持仓'}
+          {uploadMutation.isPending ? '解析中...' : '解析持仓'}
         </button>
       </form>
 
@@ -317,10 +331,10 @@ export default function ImportPage() {
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={confirming}
+              disabled={confirmMutation.isPending}
               className="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-300"
             >
-              {confirming ? '导入中...' : '确认导入'}
+              {confirmMutation.isPending ? '导入中...' : '确认导入'}
             </button>
           </div>
 
