@@ -46,6 +46,41 @@ def fetch_nav_from_akshare(code: str) -> list[dict[str, Any]]:
     return _with_retry(_fetch)
 
 
+def fetch_nav_with_fallback(code: str) -> list[dict[str, Any]]:
+    """Fetch NAV from akshare, fall back to tushare on failure."""
+    try:
+        return fetch_nav_from_akshare(code)
+    except Exception as e:
+        logger.warning("akshare NAV fetch failed for %s: %s, trying tushare", code, e)
+        try:
+            return _fetch_nav_from_tushare(code)
+        except Exception as e2:
+            logger.error("Both akshare and tushare failed for %s: %s", code, e2)
+            raise
+
+
+def _fetch_nav_from_tushare(code: str) -> list[dict[str, Any]]:
+    import os
+    import tushare as ts
+
+    token = os.environ.get("TUSHARE_TOKEN", "")
+    if not token:
+        raise RuntimeError("TUSHARE_TOKEN not set")
+
+    ts.set_token(token)
+    pro = ts.pro_api()
+    # tushare fund nav interface
+    df = pro.fund_nav(ts_code=code + ".OF")
+    rows = []
+    for _, row in df.iterrows():
+        rows.append({
+            "date": str(row["nav_date"]),
+            "nav": float(row["unit_nav"]),
+            "acc_nav": float(row["accum_nav"]),
+        })
+    return rows
+
+
 def fetch_metadata_from_akshare(code: str) -> dict[str, str]:
     def _fetch() -> dict[str, str]:
         df = ak.fund_overview_em(symbol=code)
@@ -143,7 +178,7 @@ def sync_fund_nav(session: Session, code: str) -> int:
         .order_by(FundNavHistory.date.desc())
     ).first()
 
-    rows = fetch_nav_from_akshare(code)
+    rows = fetch_nav_with_fallback(code)
 
     if latest:
         rows = [row for row in rows if row["date"] > latest]
