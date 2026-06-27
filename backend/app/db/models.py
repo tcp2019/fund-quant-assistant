@@ -101,3 +101,14 @@ class SignalRecord(SQLModel, table=True):
     reasons_json: str = "[]"
     suggested_amount: float = 0.0
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SyncLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    finished_at: datetime | None = None
+    status: str = "running"  # running | done | partial | failed
+    total_funds: int = 0
+    success_funds: int = 0
+    failed_funds: int = 0
+    errors_json: str = "[]"

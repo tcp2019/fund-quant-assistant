@@ -15,3 +15,12 @@ def reset_db():
 
     SQLModel.metadata.drop_all(engine)
     create_db_and_tables()
+
+
+@pytest.fixture
+def session():
+    from app.db.session import engine
+    from sqlmodel import Session
+
+    with Session(engine) as s:
+        yield s
