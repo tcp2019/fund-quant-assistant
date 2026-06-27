@@ -28,6 +28,9 @@ class SnapshotCreate(BaseModel):
 
 class HoldingOut(HoldingIn):
     weight_pct: float
+    current_value: float = 0.0
+    current_profit: float = 0.0
+    nav_date: str | None = None
     themes: list[HoldingThemeOut] = []
 
 
@@ -51,6 +54,10 @@ class OverviewOut(BaseModel):
     total_cost: float
     total_profit: float
     total_profit_rate: float
+    current_total_value: float = 0.0
+    current_total_profit: float = 0.0
+    current_total_profit_rate: float = 0.0
+    nav_date: str | None = None
     holdings: list[HoldingOut]
     category_allocation: list[CategoryAllocationOut] = []
     theme_allocation: list[ThemeAllocationOut] = []

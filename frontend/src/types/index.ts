@@ -14,6 +14,9 @@ export interface Holding {
   platform: string
   hold_days: number | null
   weight_pct: number
+  current_value?: number
+  current_profit?: number
+  nav_date?: string | null
   themes?: HoldingTheme[]
 }
 
@@ -23,6 +26,10 @@ export interface Overview {
   total_cost: number
   total_profit: number
   total_profit_rate: number
+  current_total_value?: number
+  current_total_profit?: number
+  current_total_profit_rate?: number
+  nav_date?: string | null
   holdings: Holding[]
   category_allocation: CategoryAllocation[]
   theme_allocation?: ThemeAllocation[]

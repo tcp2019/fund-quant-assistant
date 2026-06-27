@@ -1,5 +1,6 @@
 import json
 
+from sqlalchemy import and_, func
 from sqlmodel import Session, select
 
 from app.db.models import FundMetadata, FundNavHistory, Holding, PortfolioSnapshot
@@ -132,7 +133,15 @@ def _holding_themes_out(session: Session, holding: Holding) -> list[HoldingTheme
     ]
 
 
-def _holding_to_out(session: Session, holding: Holding, weight_pct: float) -> HoldingOut:
+def _holding_to_out(
+    session: Session,
+    holding: Holding,
+    weight_pct: float,
+    *,
+    current_value: float = 0.0,
+    current_profit: float = 0.0,
+    nav_date: str | None = None,
+) -> HoldingOut:
     return HoldingOut(
         fund_code=holding.fund_code,
         fund_name=holding.fund_name,
@@ -144,6 +153,9 @@ def _holding_to_out(session: Session, holding: Holding, weight_pct: float) -> Ho
         platform=holding.platform,
         hold_days=holding.hold_days,
         weight_pct=round(weight_pct, 2),
+        current_value=round(current_value, 2),
+        current_profit=round(current_profit, 2),
+        nav_date=nav_date,
         themes=_holding_themes_out(session, holding),
     )
 
@@ -246,22 +258,77 @@ def build_overview(session: Session) -> OverviewOut:
     total_profit = sum(h.profit for h in holdings)
     total_profit_rate = (total_profit / total_cost) if total_cost else 0.0
 
+    # --- real-time NAV revaluation ---
+    fund_codes = [h.fund_code for h in holdings]
+    nav_by_code: dict[str, FundNavHistory] = {}
+    overall_nav_date: str | None = None
+
+    if fund_codes:
+        subq = (
+            select(
+                FundNavHistory.code,
+                func.max(FundNavHistory.date).label("max_date"),
+            )
+            .where(FundNavHistory.code.in_(fund_codes))
+            .group_by(FundNavHistory.code)
+            .subquery()
+        )
+        nav_rows = session.exec(
+            select(FundNavHistory).join(
+                subq,
+                and_(
+                    FundNavHistory.code == subq.c.code,
+                    FundNavHistory.date == subq.c.max_date,
+                ),
+            )
+        ).all()
+        nav_by_code = {row.code: row for row in nav_rows}
+        overall_nav_date = max((row.date for row in nav_rows), default=None)
+
+    current_total_value = 0.0
+    current_total_profit = 0.0
+
     out_holdings: list[HoldingOut] = []
     for h in holdings:
         weight = (h.market_value / total_value * 100) if total_value else 0.0
-        out_holdings.append(_holding_to_out(session, h, weight))
+        nav_row = nav_by_code.get(h.fund_code)
+        if nav_row is not None and h.shares > 0:
+            cv = h.shares * nav_row.nav
+            cp = cv - _holding_total_cost(h)
+        else:
+            cv = h.market_value
+            cp = h.profit
+        current_total_value += cv
+        current_total_profit += cp
+        out_holdings.append(
+            _holding_to_out(
+                session,
+                h,
+                weight,
+                current_value=cv,
+                current_profit=cp,
+                nav_date=nav_row.date if nav_row else None,
+            )
+        )
+
+    current_total_profit_rate = (
+        current_total_profit / total_cost if total_cost else 0.0
+    )
 
     sorted_by_weight = sorted(out_holdings, key=lambda item: item.weight_pct, reverse=True)
     top_holdings = sorted_by_weight[:5]
     concentration_top5_pct = round(sum(item.weight_pct for item in top_holdings), 2)
 
-    fund_codes = [h.fund_code for h in holdings]
     return OverviewOut(
         snapshot_id=snap.id,
         total_value=round(total_value, 2),
         total_cost=round(total_cost, 2),
         total_profit=round(total_profit, 2),
         total_profit_rate=round(total_profit_rate, 4),
+        current_total_value=round(current_total_value, 2),
+        current_total_profit=round(current_total_profit, 2),
+        current_total_profit_rate=round(current_total_profit_rate, 4),
+        nav_date=overall_nav_date,
         holdings=out_holdings,
         category_allocation=_build_category_allocation(session, holdings, total_value),
         theme_allocation=_build_theme_allocation(session, holdings, total_value),

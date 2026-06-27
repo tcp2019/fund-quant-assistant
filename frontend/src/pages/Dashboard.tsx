@@ -58,6 +58,25 @@ export default function Dashboard() {
   const profitTone =
     overview.total_profit > 0 ? 'profit' : overview.total_profit < 0 ? 'loss' : 'default'
 
+  const hasRealtime = Boolean(
+    overview.current_total_value && overview.current_total_value > 0 && overview.nav_date,
+  )
+  const currentProfitTone =
+    (overview.current_total_profit ?? 0) > 0
+      ? 'profit'
+      : (overview.current_total_profit ?? 0) < 0
+        ? 'loss'
+        : 'default'
+
+  const valueDelta =
+    hasRealtime && overview.current_total_value
+      ? overview.current_total_value - overview.total_value
+      : 0
+  const profitDelta =
+    hasRealtime && overview.current_total_profit !== undefined
+      ? overview.current_total_profit - overview.total_profit
+      : 0
+
   const lastSyncStatus = syncLogsData?.logs?.[0]?.status ?? null
   const statusDot = lastSyncStatus ? {
     done: { color: 'bg-emerald-400', label: '数据正常' },
@@ -93,7 +112,11 @@ export default function Dashboard() {
           <h2 className="text-2xl font-semibold text-slate-900">组合总览</h2>
           <p className="mt-1 text-sm text-slate-500">
             快照 #{overview.snapshot_id ?? '—'} · 共 {overview.holdings.length} 只基金
-            {overview.data_as_of_date ? ` · 净值截至 ${overview.data_as_of_date}` : ''}
+            {overview.nav_date
+              ? ` · 净值截至 ${overview.nav_date}`
+              : overview.data_as_of_date
+                ? ` · 净值截至 ${overview.data_as_of_date}`
+                : ''}
             {statusDot && (
               <span className="inline-flex items-center gap-1 ml-3" title={statusDot.label}>
                 <span className={`inline-block h-2 w-2 rounded-full ${statusDot.color}`} />
@@ -121,18 +144,36 @@ export default function Dashboard() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="总市值" value={formatCurrency(overview.total_value)} />
+        <StatCard
+          title={hasRealtime ? '实时市值' : '总市值'}
+          value={formatCurrency(hasRealtime ? overview.current_total_value! : overview.total_value)}
+          subtitle={
+            hasRealtime
+              ? `导入时 ${formatCurrency(overview.total_value)}`
+              : undefined
+          }
+        />
         <StatCard title="总成本" value={formatCurrency(overview.total_cost)} />
         <StatCard
-          title="总盈亏"
-          value={formatProfitAmount(overview.total_profit)}
-          subtitle={formatSignedPercent(overview.total_profit_rate)}
-          tone={profitTone}
+          title={hasRealtime ? '实时盈亏' : '总盈亏'}
+          value={
+            formatProfitAmount(
+              hasRealtime ? overview.current_total_profit! : overview.total_profit,
+            )
+          }
+          subtitle={
+            hasRealtime
+              ? `快照 ${formatSignedPercent(overview.total_profit_rate)}`
+              : formatSignedPercent(overview.total_profit_rate)
+          }
+          tone={hasRealtime ? currentProfitTone : profitTone}
         />
         <StatCard
           title="收益率"
-          value={formatSignedPercent(overview.total_profit_rate)}
-          tone={profitTone}
+          value={formatSignedPercent(
+            hasRealtime ? overview.current_total_profit_rate! : overview.total_profit_rate,
+          )}
+          tone={hasRealtime ? currentProfitTone : profitTone}
         />
       </div>
 
