@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, fetchSignals } from '../api/client'
+import { useSignals, useSyncData } from '../api/hooks'
 import SignalsTable from '../components/SignalsTable'
 import type { Signal } from '../types'
 import { maybeNotifyStrongSignals, summarizeStrongSignals } from '../utils/notifications'
@@ -10,57 +9,35 @@ function sortSignals(signals: Signal[]) {
 }
 
 export default function SignalsPage() {
-  const [signals, setSignals] = useState<Signal[]>([])
-  const [snapshotId, setSnapshotId] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { data, isLoading, error, refetch } = useSignals()
+  const syncMutation = useSyncData()
 
-  const loadSignals = useCallback(async () => {
-    try {
-      const data = await fetchSignals()
-      setSignals(sortSignals(data.signals))
-      setSnapshotId(data.snapshot_id)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadSignals()
-  }, [loadSignals])
+  const signals = data?.signals ? sortSignals(data.signals) : []
+  const snapshotId = data?.snapshot_id ?? null
 
   async function handleSync() {
-    setSyncing(true)
-    setError(null)
     try {
-      await api.post('/api/data/sync', {})
-      const data = await fetchSignals()
-      setSignals(sortSignals(data.signals))
-      setSnapshotId(data.snapshot_id)
-      setError(null)
-      const summary = summarizeStrongSignals(data.snapshot_id, data.signals)
-      if (summary) {
-        maybeNotifyStrongSignals(summary)
+      await syncMutation.mutateAsync()
+      const { data: freshData } = await refetch()
+      if (freshData) {
+        const summary = summarizeStrongSignals(freshData.snapshot_id, freshData.signals)
+        if (summary) {
+          maybeNotifyStrongSignals(summary)
+        }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '同步失败')
-    } finally {
-      setSyncing(false)
+    } catch {
+      // error is tracked via syncMutation.isError / syncMutation.error
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return <p className="text-slate-500">加载中...</p>
   }
 
   if (error && signals.length === 0 && snapshotId === null) {
     return (
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        无法加载信号：{error}
+        无法加载信号：{error instanceof Error ? error.message : '未知错误'}
       </div>
     )
   }
@@ -84,9 +61,11 @@ export default function SignalsPage() {
         </p>
       </div>
 
-      {error ? (
+      {(syncMutation.isError || error) ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
+          {syncMutation.isError
+            ? (syncMutation.error instanceof Error ? syncMutation.error.message : '同步失败')
+            : (error instanceof Error ? error.message : '未知错误')}
         </div>
       ) : null}
 
@@ -106,10 +85,10 @@ export default function SignalsPage() {
             <button
               type="button"
               onClick={handleSync}
-              disabled={syncing}
+              disabled={syncMutation.isPending}
               className="inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {syncing ? '同步中...' : '同步数据'}
+              {syncMutation.isPending ? '同步中...' : '同步数据'}
             </button>
           </div>
         </div>
