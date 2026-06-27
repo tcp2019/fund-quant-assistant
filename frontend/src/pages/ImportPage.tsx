@@ -338,6 +338,12 @@ export default function ImportPage() {
             </button>
           </div>
 
+          {displayError ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {displayError}
+            </div>
+          ) : null}
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">

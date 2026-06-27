@@ -1,16 +1,18 @@
 import { Fragment, useMemo, useState } from 'react'
-import type { Signal } from '../types'
 import {
   SIGNAL_TYPE_LABELS,
   SIGNAL_TYPE_STYLES,
+  formatFundLabel,
   formatReasonRule,
   formatSignalAmount,
   formatSignalScore,
+  resolveCorrelationPair,
   scoreTextClass,
   signalTitle,
   signalActionType,
   summarizeReasons,
 } from '../utils/signalDisplay'
+import type { Signal, SignalReason } from '../types'
 
 interface SignalsTableProps {
   signals: Signal[]
@@ -44,22 +46,82 @@ function StrengthDots({ strength }: { strength: number }) {
   )
 }
 
-function SignalDetailPanel({ signal }: { signal: Signal }) {
+function ReasonLine({ reason }: { reason: SignalReason }) {
+  return (
+    <li className="text-slate-600">
+      <span className="font-medium text-slate-700">{formatReasonRule(reason.rule)}</span>
+      <span className="text-slate-400"> · </span>
+      {reason.detail}
+    </li>
+  )
+}
+
+function SignalDetailPanel({
+  signal,
+  nameByCode,
+}: {
+  signal: Signal
+  nameByCode: Record<string, string | null>
+}) {
+  const correlationReasons = signal.reasons.filter((reason) => reason.rule === 'high_correlation')
+  const otherReasons = signal.reasons.filter((reason) => reason.rule !== 'high_correlation')
+
   return (
     <div className="space-y-4 bg-slate-50 px-5 py-4 text-sm">
-      {signal.reasons.length > 0 ? (
+      {otherReasons.length > 0 ? (
         <ul className="space-y-2">
-          {signal.reasons.map((reason, index) => (
-            <li key={`${reason.layer}-${reason.rule}-${index}`} className="text-slate-600">
-              <span className="font-medium text-slate-700">{formatReasonRule(reason.rule)}</span>
-              <span className="text-slate-400"> · </span>
-              {reason.detail}
-            </li>
+          {otherReasons.map((reason, index) => (
+            <ReasonLine key={`${reason.layer}-${reason.rule}-${index}`} reason={reason} />
           ))}
         </ul>
-      ) : (
+      ) : correlationReasons.length === 0 ? (
         <p className="text-slate-500">暂无详细原因</p>
-      )}
+      ) : null}
+
+      {correlationReasons.length > 0 ? (
+        <div className={otherReasons.length > 0 ? 'border-t border-slate-200 pt-4' : ''}>
+          <h4 className="font-medium text-slate-900">
+            高度相关持仓
+            {signal.fund_code ? (
+              <span className="ml-1 font-normal text-slate-500">
+                · 以下基金与 {formatFundLabel(signal.fund_code, signal.fund_name)} 走势相近
+              </span>
+            ) : null}
+          </h4>
+          <ul className="mt-3 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            {correlationReasons.map((reason, index) => {
+              const { pairedCode, pairedName, correlation } = resolveCorrelationPair(
+                reason,
+                signal.fund_code,
+                nameByCode,
+              )
+              const pairedLabel = pairedCode
+                ? formatFundLabel(pairedCode, pairedName)
+                : reason.detail
+
+              return (
+                <li
+                  key={`corr-${pairedCode ?? index}`}
+                  className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2"
+                >
+                  <p className="font-medium text-slate-900">{pairedLabel}</p>
+                  {correlation != null && Number.isFinite(correlation) ? (
+                    <p className="text-right tabular-nums text-slate-700">
+                      相关系数{' '}
+                      <span className="font-medium text-amber-700">
+                        {correlation.toFixed(2)}
+                      </span>
+                    </p>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+          <p className="mt-2 text-xs text-slate-500">
+            近 90 日收益相关系数超过阈值，存在同源暴露，建议合并或减一只。
+          </p>
+        </div>
+      ) : null}
 
       {!signal.fund_code && signal.signal_type === 'add' ? (
         <div className="border-t border-slate-200 pt-4">
@@ -104,6 +166,16 @@ function SignalDetailPanel({ signal }: { signal: Signal }) {
 export default function SignalsTable({ signals }: SignalsTableProps) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [expandedId, setExpandedId] = useState<number | null>(null)
+
+  const nameByCode = useMemo(() => {
+    const map: Record<string, string | null> = {}
+    for (const signal of signals) {
+      if (signal.fund_code) {
+        map[signal.fund_code] = signal.fund_name
+      }
+    }
+    return map
+  }, [signals])
 
   const counts = useMemo(() => {
     const result: Record<TypeFilter, number> = {
@@ -242,7 +314,7 @@ export default function SignalsTable({ signals }: SignalsTableProps) {
                     {expanded ? (
                       <tr>
                         <td colSpan={7} className="p-0">
-                          <SignalDetailPanel signal={signal} />
+                          <SignalDetailPanel signal={signal} nameByCode={nameByCode} />
                         </td>
                       </tr>
                     ) : null}

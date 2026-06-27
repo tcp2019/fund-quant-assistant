@@ -121,6 +121,9 @@ export interface SignalReason {
   detail: string
   category?: string | null
   category_label?: string | null
+  paired_fund_code?: string | null
+  paired_fund_name?: string | null
+  correlation?: number | null
 }
 
 export interface Signal {

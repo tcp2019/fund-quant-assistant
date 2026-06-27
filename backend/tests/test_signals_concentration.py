@@ -24,8 +24,8 @@ def test_hold_days_blocks_sell():
 
 def test_high_correlation_pair():
     holdings = [
-        {"fund_code": "110011", "weight_pct": 15.0, "hold_days": 30},
-        {"fund_code": "110022", "weight_pct": 15.0, "hold_days": 30},
+        {"fund_code": "110011", "fund_name": "易方达优质精选", "weight_pct": 15.0, "hold_days": 30},
+        {"fund_code": "110022", "fund_name": "易方达消费行业", "weight_pct": 15.0, "hold_days": 30},
     ]
     corr_matrix = {
         "labels": ["110011", "110022"],
@@ -35,7 +35,11 @@ def test_high_correlation_pair():
         holdings, corr_matrix=corr_matrix, thresholds=DEFAULT_THRESHOLDS
     )
     corr_signals = [s for s in signals if s["signal_type"] == "watch"]
-    assert len(corr_signals) == 1
-    assert corr_signals[0]["fund_code"] == "110011"
-    assert corr_signals[0]["paired_fund_code"] == "110022"
-    assert "0.85" in corr_signals[0]["detail"]
+    assert len(corr_signals) == 2
+    by_fund = {s["fund_code"]: s for s in corr_signals}
+    assert by_fund["110011"]["paired_fund_code"] == "110022"
+    assert by_fund["110022"]["paired_fund_code"] == "110011"
+    assert by_fund["110011"]["paired_fund_name"] == "易方达消费行业"
+    assert by_fund["110022"]["paired_fund_name"] == "易方达优质精选"
+    assert "易方达优质精选（110011）" in by_fund["110011"]["detail"]
+    assert "0.85" in by_fund["110011"]["detail"]

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { HotTheme } from '../types'
+import { profitLossTextClass } from '../utils/profitLoss'
 
 interface HotThemeRadarProps {
   themes: HotTheme[]
@@ -37,7 +38,9 @@ export default function HotThemeRadar({ themes }: HotThemeRadarProps) {
                 <p className="font-medium text-slate-900">{theme.label}</p>
                 <div className="mt-2 space-y-1 text-sm">
                   {theme.return_1m_median !== null ? (
-                    <p className="tabular-nums text-emerald-700">
+                    <p
+                      className={`tabular-nums ${profitLossTextClass(theme.return_1m_median)}`}
+                    >
                       近1月 {theme.return_1m_median.toFixed(2)}%
                     </p>
                   ) : (

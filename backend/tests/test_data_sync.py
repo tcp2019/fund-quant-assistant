@@ -35,6 +35,28 @@ def test_sync_fund_nav_mock(monkeypatch):
         assert rows[0].acc_nav == 1.8
 
 
+def test_sync_fund_nav_falls_back_when_acc_nav_is_nan(monkeypatch):
+    def fake_fetch(code: str):
+        return [
+            {"date": "2019-08-30", "nav": 1.035, "acc_nav": float("nan")},
+            {"date": "2019-08-31", "nav": float("nan"), "acc_nav": 1.04},
+        ]
+
+    monkeypatch.setattr("app.services.data_sync.fetch_nav_from_akshare", fake_fetch)
+
+    with Session(engine) as session:
+        count = sync_fund_nav(session, "000111")
+        assert count == 1
+
+        rows = session.exec(
+            select(FundNavHistory).where(FundNavHistory.code == "000111")
+        ).all()
+        assert len(rows) == 1
+        assert rows[0].date == "2019-08-30"
+        assert rows[0].nav == 1.035
+        assert rows[0].acc_nav == 1.035
+
+
 def test_sync_fund_metadata_mock(monkeypatch):
     def fake_metadata(code: str):
         return {

@@ -31,6 +31,22 @@ if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
   exit 1
 fi
 
+check_port() {
+  local port="$1" name="$2"
+  local pids
+  pids="$(lsof -ti ":$port" 2>/dev/null || true)"
+  if [[ -n "$pids" ]]; then
+    echo "Error: port $port ($name) already in use."
+    echo "  PIDs: $pids"
+    echo "  Run: kill $pids"
+    echo "  Or:  lsof -ti :$port | xargs kill"
+    return 1
+  fi
+}
+
+check_port 8000 "backend" || exit 1
+check_port 5173 "frontend" || exit 1
+
 echo "Starting backend (http://127.0.0.1:8000)..."
 (
   cd "$BACKEND_DIR"
@@ -55,5 +71,4 @@ echo "  API docs: http://127.0.0.1:8000/docs"
 echo ""
 echo "Press Ctrl+C to stop both servers."
 
-wait -n || true
-cleanup
+wait || true

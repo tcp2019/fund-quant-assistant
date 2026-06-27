@@ -50,4 +50,5 @@ docs/superpowers/
 | v1.8 NAV复权+业绩增强+定期报告 | [2026-06-27-nav-accuracy-signals-report-design.md](specs/active/2026-06-27-nav-accuracy-signals-report-design.md) | [plan](plans/completed/2026-06-27-nav-accuracy-signals-report.md) | — |
 | v1.9 风格因子+宏观感知+模拟调仓 | [2026-06-27-factor-macro-whatif-design.md](specs/active/2026-06-27-factor-macro-whatif-design.md) | [plan](plans/completed/2026-06-27-factor-macro-whatif.md) | — |
 | v2.0 动态权重+新手引导+PWA | [2026-06-27-adaptive-onboarding-pwa-design.md](specs/active/2026-06-27-adaptive-onboarding-pwa-design.md) | [plan](plans/completed/2026-06-27-adaptive-onboarding-pwa.md) | — |
-| v2.1 历史回测+组合优化器+多数据源 | [2026-06-27-backtest-optimizer-multisource-design.md](specs/active/2026-06-27-backtest-optimizer-multisource-design.md) | [plan](plans/active/2026-06-27-backtest-optimizer-multisource.md) | — |
+| v2.1 历史回测+组合优化器+多数据源 | [2026-06-27-backtest-optimizer-multisource-design.md](specs/active/2026-06-27-backtest-optimizer-multisource-design.md) | [plan](plans/completed/2026-06-27-backtest-optimizer-multisource.md) | — |
+| v2.2 数据质量增强+信号展示优化 | [2026-06-27-data-quality-v22-design.md](specs/active/2026-06-27-data-quality-v22-design.md) | [plan](plans/completed/2026-06-27-data-quality-v22.md) | — |

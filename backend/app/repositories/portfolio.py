@@ -27,29 +27,51 @@ def get_latest_snapshot(session: Session) -> PortfolioSnapshot | None:
     ).first()
 
 
+def _merge_holding(existing: HoldingIn, incoming: HoldingIn) -> HoldingIn:
+    total_shares = existing.shares + incoming.shares
+    total_market_value = existing.market_value + incoming.market_value
+    total_profit = existing.profit + incoming.profit
+
+    if total_shares > 0:
+        cost_price = (
+            existing.cost_price * existing.shares + incoming.cost_price * incoming.shares
+        ) / total_shares
+    elif total_market_value > 0:
+        cost_price = (
+            existing.cost_price * existing.market_value + incoming.cost_price * incoming.market_value
+        ) / total_market_value
+    else:
+        cost_price = existing.cost_price or incoming.cost_price
+
+    implied_cost = total_market_value - total_profit
+    profit_rate = total_profit / implied_cost if implied_cost > 0 else 0.0
+
+    return HoldingIn(
+        fund_code=incoming.fund_code,
+        fund_name=existing.fund_name,
+        shares=total_shares,
+        cost_price=cost_price,
+        market_value=total_market_value,
+        profit=total_profit,
+        profit_rate=profit_rate,
+        platform=f"{existing.platform},{incoming.platform}",
+        hold_days=existing.hold_days or incoming.hold_days,
+    )
+
+
 def create_snapshot(session: Session, data: SnapshotCreate) -> PortfolioSnapshot:
     snap = PortfolioSnapshot(source=data.source, note=data.note)
     session.add(snap)
     session.commit()
     session.refresh(snap)
 
-    merged: dict[str, HoldingIn] = {}
+    merged: dict[tuple[str, str], HoldingIn] = {}
     for h in data.holdings:
-        if h.fund_code in merged:
-            existing = merged[h.fund_code]
-            merged[h.fund_code] = HoldingIn(
-                fund_code=h.fund_code,
-                fund_name=h.fund_name,
-                shares=existing.shares + h.shares,
-                cost_price=(existing.cost_price * existing.shares + h.cost_price * h.shares)
-                / (existing.shares + h.shares),
-                market_value=existing.market_value + h.market_value,
-                profit=existing.profit + h.profit,
-                profit_rate=0.0,
-                platform=f"{existing.platform},{h.platform}",
-            )
+        key = (h.fund_code, h.fund_name)
+        if key in merged:
+            merged[key] = _merge_holding(merged[key], h)
         else:
-            merged[h.fund_code] = h
+            merged[key] = h
 
     for h in merged.values():
         session.add(

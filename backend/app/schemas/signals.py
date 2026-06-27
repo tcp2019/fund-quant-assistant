@@ -11,6 +11,9 @@ class SignalReason(BaseModel):
     detail: str
     category: str | None = None
     category_label: str | None = None
+    paired_fund_code: str | None = None
+    paired_fund_name: str | None = None
+    correlation: float | None = None
 
 
 class SignalOut(BaseModel):

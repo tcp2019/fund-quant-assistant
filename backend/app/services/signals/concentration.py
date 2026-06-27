@@ -1,6 +1,13 @@
 REDEMPTION_FEE_MIN_HOLD_DAYS = 7
 
 
+def _fund_display(code: str, names: dict[str, str | None]) -> str:
+    name = names.get(code)
+    if name:
+        return f"{name}（{code}）"
+    return code
+
+
 def compute_concentration_signals(
     holdings: list[dict],
     corr_matrix: dict | None,
@@ -43,6 +50,7 @@ def compute_concentration_signals(
             )
 
     if corr_matrix is not None:
+        names = {holding["fund_code"]: holding.get("fund_name") for holding in holdings}
         labels = corr_matrix["labels"]
         matrix = corr_matrix["matrix"]
         n = len(labels)
@@ -50,14 +58,32 @@ def compute_concentration_signals(
             for j in range(i + 1, n):
                 corr = float(matrix[i][j])
                 if corr > corr_max:
+                    fund_a = _fund_display(labels[i], names)
+                    fund_b = _fund_display(labels[j], names)
                     signals.append(
                         {
                             "fund_code": labels[i],
                             "paired_fund_code": labels[j],
+                            "paired_fund_name": names.get(labels[j]),
                             "signal_type": "watch",
                             "correlation": round(corr, 4),
                             "detail": (
-                                f"{labels[i]} 与 {labels[j]} 相关系数 "
+                                f"{fund_a} 与 {fund_b} 相关系数 "
+                                f"{corr:.2f} 超过 {corr_max:.2f}，存在同源暴露，建议合并或减一只"
+                            ),
+                        }
+                    )
+                    fund_b_self = _fund_display(labels[j], names)
+                    fund_a_other = _fund_display(labels[i], names)
+                    signals.append(
+                        {
+                            "fund_code": labels[j],
+                            "paired_fund_code": labels[i],
+                            "paired_fund_name": names.get(labels[i]),
+                            "signal_type": "watch",
+                            "correlation": round(corr, 4),
+                            "detail": (
+                                f"{fund_b_self} 与 {fund_a_other} 相关系数 "
                                 f"{corr:.2f} 超过 {corr_max:.2f}，存在同源暴露，建议合并或减一只"
                             ),
                         }

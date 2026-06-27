@@ -122,15 +122,138 @@ _MERGED_LINE_RE = re.compile(
 )
 
 
-def _parse_alipay_tab_export(text: str) -> list[ParsedHolding]:
-    """Parse tab-separated exports: 序号 | 名称 | 代码 | 市值 | 收益率 | (可选赛道)."""
-    if "\t" not in text:
-        return []
+def _normalize_tab_header(cell: str) -> str:
+    return re.sub(r"\s+", "", cell.strip()).replace("(元)", "")
 
+
+def _tab_header_columns(header_parts: list[str]) -> dict[str, int] | None:
+    """Map canonical fields to column index from a tab-export header row."""
+    header_map = {_normalize_tab_header(part): index for index, part in enumerate(header_parts)}
+
+    def col(*names: str) -> int | None:
+        for name in names:
+            index = header_map.get(_normalize_tab_header(name))
+            if index is not None:
+                return index
+        return None
+
+    code_col = col("基金代码")
+    name_col = col("基金名称", "基金完整名称")
+    mv_col = col("持仓金额", "市值")
+    if code_col is None or name_col is None or mv_col is None:
+        return None
+
+    return {
+        "code": code_col,
+        "name": name_col,
+        "market_value": mv_col,
+        "profit": col("持有收益"),
+        "profit_rate": col("持有收益率", "收益率"),
+    }
+
+
+def _profit_rate_from_amounts(market_value: float, profit: float) -> float:
+    cost = market_value - profit
+    if cost <= 0:
+        return 0.0
+    return profit / cost
+
+
+def _append_tab_holding(
+    results: list[ParsedHolding],
+    seen_keys: set[tuple[str, str]],
+    *,
+    code: str,
+    name: str,
+    market_value: float,
+    profit: float,
+    profit_rate: float | None,
+) -> None:
+    if not re.fullmatch(r"\d{6}", code):
+        return
+
+    name = strip_fund_name(name)
+    if not name or any(part in name for part in _SKIP_NAME_PARTS):
+        return
+    if market_value <= 0:
+        return
+
+    dedupe_key = (code, name)
+    if dedupe_key in seen_keys:
+        return
+
+    if profit_rate is None:
+        profit_rate = _profit_rate_from_amounts(market_value, profit)
+    else:
+        profit = round(market_value * profit_rate / (1 + profit_rate), 2) if profit_rate else profit
+
+    implied_cost = round(market_value - profit, 2) if profit else 0.0
+    results.append(
+        ParsedHolding(
+            fund_code=code,
+            fund_name=name,
+            shares=0.0,
+            cost_price=implied_cost if implied_cost > 0 else 0.0,
+            market_value=market_value,
+            profit=profit,
+            profit_rate=profit_rate,
+            platform="alipay",
+            confidence=0.95 if profit_rate is not None else 0.93,
+        )
+    )
+    seen_keys.add(dedupe_key)
+
+
+def _parse_alipay_tab_export_with_header(
+    lines: list[str], columns: dict[str, int]
+) -> list[ParsedHolding]:
+    """Parse canonical tab export: 基金代码 | 基金名称 | 持仓金额 | ... | 持有收益."""
     results: list[ParsedHolding] = []
-    seen_codes: set[str] = set()
+    seen_keys: set[tuple[str, str]] = set()
 
-    for raw_line in text.splitlines():
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith(("=", "【", "备注", "全部", "基金持仓")):
+            continue
+
+        parts = [part.strip() for part in line.split("\t")]
+        required = max(columns["code"], columns["name"], columns["market_value"])
+        if len(parts) <= required:
+            continue
+
+        code = parts[columns["code"]]
+        name = parts[columns["name"]]
+        if any(part in name for part in _SKIP_NAME_PARTS):
+            continue
+
+        market_value = parse_money(parts[columns["market_value"]])
+        profit_col = columns.get("profit")
+        rate_col = columns.get("profit_rate")
+
+        profit = parse_money(parts[profit_col]) if profit_col is not None and profit_col < len(parts) else 0.0
+        profit_rate = (
+            _parse_rate(parts[rate_col]) if rate_col is not None and rate_col < len(parts) else None
+        )
+
+        _append_tab_holding(
+            results,
+            seen_keys,
+            code=code,
+            name=name,
+            market_value=market_value,
+            profit=profit,
+            profit_rate=profit_rate,
+        )
+
+    return results
+
+
+def _parse_alipay_tab_export_legacy(lines: list[str]) -> list[ParsedHolding]:
+    """Parse older tab exports: 序号 | 名称 | 代码 | 市值 | 收益率 | (可选赛道)."""
+    results: list[ParsedHolding] = []
+    seen_keys: set[tuple[str, str]] = set()
+
+    for raw_line in lines:
         line = raw_line.strip()
         if not line or line.startswith(
             ("=", "-", "【", "序号", "基金完整", "备注", "全部", "基金持仓")
@@ -150,38 +273,40 @@ def _parse_alipay_tab_export(text: str) -> list[ParsedHolding]:
         if code_idx is None or code_idx < 1 or code_idx + 2 >= len(parts):
             continue
 
-        code = parts[code_idx]
-        if code in seen_codes:
-            continue
-
-        name = strip_fund_name(parts[code_idx - 1])
-        if not name or any(part in name for part in _SKIP_NAME_PARTS):
-            continue
-
         market_value = parse_money(parts[code_idx + 1])
-        if market_value <= 0:
-            continue
-
         profit_rate = _parse_rate(parts[code_idx + 2])
-        profit = round(market_value * profit_rate / (1 + profit_rate), 2) if profit_rate else 0.0
-        implied_cost = round(market_value - profit, 2) if profit else 0.0
-
-        results.append(
-            ParsedHolding(
-                fund_code=code,
-                fund_name=name,
-                shares=0.0,
-                cost_price=implied_cost if implied_cost > 0 else 0.0,
-                market_value=market_value,
-                profit=profit,
-                profit_rate=profit_rate,
-                platform="alipay",
-                confidence=0.92,
-            )
+        _append_tab_holding(
+            results,
+            seen_keys,
+            code=parts[code_idx],
+            name=parts[code_idx - 1],
+            market_value=market_value,
+            profit=0.0,
+            profit_rate=profit_rate,
         )
-        seen_codes.add(code)
 
     return results
+
+
+def _parse_alipay_tab_export(text: str) -> list[ParsedHolding]:
+    if "\t" not in text:
+        return []
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return []
+
+    header_parts = [part.strip() for part in lines[0].split("\t")]
+    columns = _tab_header_columns(header_parts)
+    if columns is not None and _normalize_tab_header(header_parts[0]) in {
+        "基金代码",
+        "序号",
+    }:
+        rows = _parse_alipay_tab_export_with_header(lines[1:], columns)
+        if rows:
+            return rows
+
+    return _parse_alipay_tab_export_legacy(lines)
 
 
 def _parse_alipay_merged_text(text: str) -> list[ParsedHolding]:

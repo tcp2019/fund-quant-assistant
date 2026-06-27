@@ -8,6 +8,7 @@ from app.db.models import Holding, SignalRecord
 from app.repositories.portfolio import get_latest_snapshot
 from app.schemas.signals import SignalOut, SignalsListOut
 from app.services.fund_recommendations import recommend_funds
+from app.services.signals.reason_enrichment import enrich_high_correlation_reasons
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 
@@ -39,6 +40,10 @@ def list_signals(session: Session = Depends(get_db)):
     signals: list[SignalOut] = []
     for record in records:
         reasons = _parse_reasons(record.reasons_json)
+        if record.fund_code:
+            reasons = enrich_high_correlation_reasons(
+                reasons, record.fund_code, name_by_code
+            )
         category = None
         category_label = None
         if not record.fund_code:

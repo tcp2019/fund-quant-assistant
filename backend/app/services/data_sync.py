@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from typing import Any
 
 import akshare as ak
@@ -16,6 +17,27 @@ from app.services.http_retry import with_retry as _with_retry
 from app.services.metrics_cache import compute_and_cache_metrics
 from app.services.peer_metrics import fetch_peer_return_percentile_3m, parse_user_themes
 
+
+def _safe_nav_value(value: Any, fallback: float | None = None) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    if not math.isfinite(number):
+        return fallback
+    return number
+
+
+def _normalize_nav_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    nav = _safe_nav_value(row.get("nav"))
+    if nav is None:
+        return None
+    acc_nav = _safe_nav_value(row.get("acc_nav"), fallback=nav)
+    if acc_nav is None:
+        acc_nav = nav
+    return {"date": row["date"], "nav": nav, "acc_nav": acc_nav}
+
+
 def fetch_nav_from_akshare(code: str) -> list[dict[str, Any]]:
     def _fetch() -> list[dict[str, Any]]:
         nav_df = ak.fund_open_fund_info_em(
@@ -25,15 +47,19 @@ def fetch_nav_from_akshare(code: str) -> list[dict[str, Any]]:
             symbol=code, indicator="累计净值走势", period="成立来"
         )
 
-        acc_by_date = {
-            str(row["净值日期"]): float(row["累计净值"])
-            for _, row in acc_df.iterrows()
-        }
+        acc_by_date: dict[str, float] = {}
+        for _, row in acc_df.iterrows():
+            date = str(row["净值日期"])
+            acc_nav = _safe_nav_value(row["累计净值"])
+            if acc_nav is not None:
+                acc_by_date[date] = acc_nav
 
         rows: list[dict[str, Any]] = []
         for _, row in nav_df.iterrows():
             date = str(row["净值日期"])
-            nav = float(row["单位净值"])
+            nav = _safe_nav_value(row["单位净值"])
+            if nav is None:
+                continue
             rows.append(
                 {
                     "date": date,
@@ -73,11 +99,15 @@ def _fetch_nav_from_tushare(code: str) -> list[dict[str, Any]]:
     df = pro.fund_nav(ts_code=code + ".OF")
     rows = []
     for _, row in df.iterrows():
-        rows.append({
-            "date": str(row["nav_date"]),
-            "nav": float(row["unit_nav"]),
-            "acc_nav": float(row["accum_nav"]),
-        })
+        normalized = _normalize_nav_row(
+            {
+                "date": str(row["nav_date"]),
+                "nav": row["unit_nav"],
+                "acc_nav": row["accum_nav"],
+            }
+        )
+        if normalized is not None:
+            rows.append(normalized)
     return rows
 
 
@@ -193,22 +223,26 @@ def sync_fund_nav(session: Session, code: str) -> int:
 
     synced = 0
     for row in rows:
+        normalized = _normalize_nav_row(row)
+        if normalized is None:
+            continue
+
         existing = session.exec(
             select(FundNavHistory).where(
                 FundNavHistory.code == code,
-                FundNavHistory.date == row["date"],
+                FundNavHistory.date == normalized["date"],
             )
         ).first()
         if existing:
-            existing.nav = row["nav"]
-            existing.acc_nav = row["acc_nav"]
+            existing.nav = normalized["nav"]
+            existing.acc_nav = normalized["acc_nav"]
         else:
             session.add(
                 FundNavHistory(
                     code=code,
-                    date=row["date"],
-                    nav=row["nav"],
-                    acc_nav=row["acc_nav"],
+                    date=normalized["date"],
+                    nav=normalized["nav"],
+                    acc_nav=normalized["acc_nav"],
                 )
             )
         synced += 1
@@ -307,6 +341,7 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
         try:
             sync_fund_metadata(session, code, fallback_name=name_by_code.get(code, ""))
         except Exception as exc:
+            session.rollback()
             errors.append({"fund_code": code, "stage": "metadata", "error": str(exc)})
             details.append({"code": code, "status": "metadata_error", "error": str(exc)})
 
@@ -314,6 +349,7 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
     try:
         sync_purchase_limits(session, codes)
     except Exception as exc:
+        session.rollback()
         errors.append({"fund_code": "*", "stage": "purchase_limits", "error": str(exc)})
         details.append({"code": "*", "status": "purchase_limits_error", "error": str(exc)})
 
@@ -326,6 +362,7 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
                 _apply_peer_metrics(session, code)
                 session.commit()
             except Exception as exc:
+                session.rollback()
                 errors.append({"fund_code": code, "stage": "peer_metrics", "error": str(exc)})
                 details.append({"code": code, "status": "peer_metrics_error", "error": str(exc)})
             details.append(
@@ -338,6 +375,7 @@ def sync_portfolio_funds(session: Session) -> dict[str, Any]:
             )
             synced += 1
         except Exception as exc:
+            session.rollback()
             errors.append({"fund_code": code, "stage": "nav", "error": str(exc)})
             details.append({"code": code, "status": "error", "error": str(exc)})
 

@@ -56,6 +56,21 @@ def test_parse_alipay_tab_export_with_spaces_and_category():
     assert rows[3].fund_code == "014497"
 
 
+def test_parse_alipay_tab_export_code_first_with_holding_profit():
+    text = (FIXTURES / "alipay_tab_code_first_sample.txt").read_text(encoding="utf-8")
+    rows = parse_alipay_text(text)
+    assert len(rows) == 5
+    assert rows[0].fund_code == "010688"
+    assert "易方达全球成长精选" in rows[0].fund_name
+    assert rows[0].market_value == 66337.88
+    assert rows[0].profit == 33697.88
+    assert rows[0].profit_rate > 1.0
+    assert rows[-1].fund_code == "007466"
+    assert "华泰柏瑞" in rows[-1].fund_name
+    assert rows[-1].profit == -623.56
+    assert rows[-1].profit_rate < 0
+
+
 def test_parse_tiantian():
     text = (FIXTURES / "tiantian_sample.txt").read_text(encoding="utf-8")
     rows = parse_tiantian_text(text)

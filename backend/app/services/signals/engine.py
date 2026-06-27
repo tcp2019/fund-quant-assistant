@@ -360,13 +360,17 @@ def aggregate_signals(
                 if "paired_fund_code" in conc_signal
                 else "single_fund_concentration"
             )
-            reasons.append(
-                {
-                    "layer": "concentration",
-                    "rule": rule,
-                    "detail": conc_signal["detail"],
-                }
-            )
+            reason: dict = {
+                "layer": "concentration",
+                "rule": rule,
+                "detail": conc_signal["detail"],
+            }
+            if rule == "high_correlation":
+                reason["paired_fund_code"] = conc_signal.get("paired_fund_code")
+                reason["paired_fund_name"] = conc_signal.get("paired_fund_name")
+                if "correlation" in conc_signal:
+                    reason["correlation"] = conc_signal["correlation"]
+            reasons.append(reason)
 
         perf_signal = perf_by_fund.get(fund_code)
         if perf_signal and perf_signal["signal_type"] != "hold":

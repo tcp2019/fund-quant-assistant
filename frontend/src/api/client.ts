@@ -98,7 +98,17 @@ export async function confirmOcr(
   jobId: number,
   holdings: OcrUploadResponse['holdings'],
 ): Promise<OcrConfirmResponse> {
-  return api.post<OcrConfirmResponse>(`/api/ocr/${jobId}/confirm`, { holdings })
+  const response = await fetch(`/api/ocr/${jobId}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ holdings }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json() as Promise<OcrConfirmResponse>
 }
 
 export async function fetchSignals(): Promise<SignalsListOut> {

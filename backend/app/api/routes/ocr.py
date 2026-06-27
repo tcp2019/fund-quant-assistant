@@ -19,6 +19,7 @@ from app.schemas.ocr import (
     ParsedHoldingOut,
 )
 from app.schemas.portfolio import SnapshotCreate
+from app.services.fund_code_resolver import resolve_holdings_fund_codes
 from app.services.ocr.pipeline import parse_ocr_text, run_paddle_ocr, validate_holding
 
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
@@ -43,7 +44,8 @@ def _build_upload_response(
     text: str, platform_hint: str | None, session: Session
 ) -> OcrUploadResponse:
     rows = parse_ocr_text(text, platform_hint=platform_hint)
-    warnings: list[str] = []
+    code_warnings = resolve_holdings_fund_codes(session, rows)
+    warnings: list[str] = list(code_warnings)
     holdings = []
     for row in rows:
         row_warnings = validate_holding(row)

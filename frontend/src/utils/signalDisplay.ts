@@ -64,6 +64,41 @@ export function formatReasonRule(rule: string) {
   return REASON_RULE_LABELS[rule] ?? rule
 }
 
+export function formatFundLabel(code: string, name?: string | null) {
+  if (name) return `${name}（${code}）`
+  return code
+}
+
+const CORRELATION_VALUE = /相关系数\s+([\d.]+)/
+const FUND_CODE = /\d{6}/g
+
+export function resolveCorrelationPair(
+  reason: { detail: string; paired_fund_code?: string | null; paired_fund_name?: string | null; correlation?: number | null },
+  selfCode: string,
+  nameByCode?: Record<string, string | null | undefined>,
+) {
+  let pairedCode = reason.paired_fund_code ?? null
+  let correlation = reason.correlation ?? null
+  const detail = reason.detail ?? ''
+
+  if (correlation == null) {
+    const match = detail.match(CORRELATION_VALUE)
+    if (match) correlation = Number.parseFloat(match[1])
+  }
+
+  if (!pairedCode) {
+    const codes = detail.match(FUND_CODE) ?? []
+    pairedCode = codes.find((code) => code !== selfCode) ?? null
+  }
+
+  let pairedName = reason.paired_fund_name ?? null
+  if (!pairedName && pairedCode && nameByCode) {
+    pairedName = nameByCode[pairedCode] ?? null
+  }
+
+  return { pairedCode, pairedName, correlation }
+}
+
 /** Action type for filtering — aligns weak rebalance hints with 增配/减仓 tabs. */
 export function signalActionType(signal: Signal): string {
   const protectedByPurchaseLimit = signal.reasons.some(
