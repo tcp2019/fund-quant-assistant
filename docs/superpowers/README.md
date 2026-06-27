@@ -52,3 +52,4 @@ docs/superpowers/
 | v2.0 动态权重+新手引导+PWA | [2026-06-27-adaptive-onboarding-pwa-design.md](specs/active/2026-06-27-adaptive-onboarding-pwa-design.md) | [plan](plans/completed/2026-06-27-adaptive-onboarding-pwa.md) | — |
 | v2.1 历史回测+组合优化器+多数据源 | [2026-06-27-backtest-optimizer-multisource-design.md](specs/active/2026-06-27-backtest-optimizer-multisource-design.md) | [plan](plans/completed/2026-06-27-backtest-optimizer-multisource.md) | — |
 | v2.2 数据质量增强+信号展示优化 | [2026-06-27-data-quality-v22-design.md](specs/active/2026-06-27-data-quality-v22-design.md) | [plan](plans/completed/2026-06-27-data-quality-v22.md) | — |
+| v2.3 AI 信号解读 | [2026-06-27-ai-signal-interpretation-design.md](specs/active/2026-06-27-ai-signal-interpretation-design.md) | [plan](plans/completed/2026-06-27-ai-signal-interpretation.md) | — |

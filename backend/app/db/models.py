@@ -100,6 +100,7 @@ class SignalRecord(SQLModel, table=True):
     strength: int
     reasons_json: str = "[]"
     suggested_amount: float = 0.0
+    interpretation: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

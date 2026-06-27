@@ -138,6 +138,7 @@ export interface Signal {
   strength: number
   reasons: SignalReason[]
   suggested_amount: number
+  interpretation?: string | null
   created_at: string
   candidates?: FundCandidate[]
 }

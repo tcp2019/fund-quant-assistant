@@ -115,6 +115,13 @@ export async function fetchSignals(): Promise<SignalsListOut> {
   return api.get<SignalsListOut>('/api/signals')
 }
 
+export async function fetchSignalInterpretation(
+  signalId: number,
+  apiKey?: string,
+): Promise<{ signal_id: number; interpretation: string | null; cached: boolean }> {
+  return api.post(`/api/signals/${signalId}/interpret`, { api_key: apiKey })
+}
+
 export async function fetchCorrelation(): Promise<CorrelationOut> {
   return api.get<CorrelationOut>('/api/analysis/correlation')
 }

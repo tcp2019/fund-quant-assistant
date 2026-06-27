@@ -347,3 +347,73 @@ def test_api_signals_sorted_by_score(monkeypatch):
     assert data["snapshot_id"] is not None
     scores = [signal["score"] for signal in data["signals"]]
     assert scores == sorted(scores, reverse=True)
+
+
+def test_interpret_endpoint_returns_cached():
+    with Session(engine) as session:
+        snap = _seed_snapshot(session)
+        session.add(
+            SignalRecord(
+                snapshot_id=snap.id,
+                fund_code="110011",
+                signal_type="hold",
+                score=0.0,
+                strength=1,
+                reasons_json='[{"layer":"aggregate","rule":"no_action","detail":"无需调整"}]',
+                interpretation="已缓存的解读",
+            )
+        )
+        session.commit()
+
+    resp = client.post("/api/signals/1/interpret")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["cached"] is True
+    assert data["interpretation"] == "已缓存的解读"
+
+
+def test_interpret_endpoint_404():
+    resp = client.post("/api/signals/99999/interpret")
+    assert resp.status_code == 404
+
+
+def test_list_signals_includes_interpretation():
+    with Session(engine) as session:
+        from app.db.models import Holding, PortfolioSnapshot, SignalRecord
+
+        snap = PortfolioSnapshot(source="manual", note="test")
+        session.add(snap)
+        session.commit()
+        session.refresh(snap)
+
+        session.add(
+            Holding(
+                snapshot_id=snap.id,
+                fund_code="110011",
+                fund_name="易方达优质精选",
+                shares=1000,
+                cost_price=1.5,
+                market_value=5000,
+                profit=500,
+                hold_days=30,
+            )
+        )
+        session.add(
+            SignalRecord(
+                snapshot_id=snap.id,
+                fund_code="110011",
+                signal_type="hold",
+                score=0.0,
+                strength=1,
+                reasons_json='[{"layer":"aggregate","rule":"no_action","detail":"无需调整"}]',
+                interpretation="测试解读内容",
+            )
+        )
+        session.commit()
+
+    resp = client.get("/api/signals")
+    assert resp.status_code == 200
+    data = resp.json()
+    signals = data["signals"]
+    assert len(signals) == 1
+    assert signals[0]["interpretation"] == "测试解读内容"

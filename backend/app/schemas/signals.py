@@ -28,8 +28,19 @@ class SignalOut(BaseModel):
     strength: int = Field(ge=1, le=5)
     reasons: list[SignalReason]
     suggested_amount: float
+    interpretation: str | None = None
     created_at: datetime
     candidates: list[FundCandidateOut] = []
+
+
+class InterpretRequest(BaseModel):
+    api_key: str | None = None
+
+
+class InterpretOut(BaseModel):
+    signal_id: int
+    interpretation: str | None
+    cached: bool
 
 
 class SignalsListOut(BaseModel):

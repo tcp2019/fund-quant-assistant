@@ -25,6 +25,10 @@ _STRATEGY_CONFIG_COLUMNS = (
     ("fund_target_weights_json", "TEXT NOT NULL DEFAULT '{}'"),
 )
 
+_SIGNAL_RECORD_COLUMNS = (
+    ("interpretation", "TEXT"),
+)
+
 
 def _ensure_fund_metadata_purchase_columns() -> None:
     if not settings.database_url.startswith("sqlite"):
@@ -74,11 +78,28 @@ def _ensure_strategy_config_columns() -> None:
         conn.commit()
 
 
+def _ensure_signal_record_columns() -> None:
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    with engine.connect() as conn:
+        existing = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(signalrecord)")).fetchall()
+        }
+        for name, ddl in _SIGNAL_RECORD_COLUMNS:
+            if name in existing:
+                continue
+            conn.execute(text(f"ALTER TABLE signalrecord ADD COLUMN {name} {ddl}"))
+        conn.commit()
+
+
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
     _ensure_fund_metadata_purchase_columns()
     _ensure_fund_metrics_cache_columns()
     _ensure_strategy_config_columns()
+    _ensure_signal_record_columns()
 
 
 def get_session():

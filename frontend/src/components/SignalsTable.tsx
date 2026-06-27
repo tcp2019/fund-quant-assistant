@@ -13,6 +13,7 @@ import {
   summarizeReasons,
 } from '../utils/signalDisplay'
 import type { Signal, SignalReason } from '../types'
+import { fetchSignalInterpretation } from '../api/client'
 
 interface SignalsTableProps {
   signals: Signal[]
@@ -55,6 +56,70 @@ function ReasonLine({ reason }: { reason: SignalReason }) {
     </li>
   )
 }
+
+function AIInterpretation({ signal }: { signal: Signal }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'result' | 'error'>(
+    signal.interpretation ? 'result' : 'idle',
+  )
+  const [text, setText] = useState<string | null>(signal.interpretation ?? null)
+
+  async function handleInterpret() {
+    setState('loading')
+    try {
+      const result = await fetchSignalInterpretation(signal.id)
+      if (result.interpretation) {
+        setText(result.interpretation)
+        setState('result')
+      } else {
+        setState('error')
+      }
+    } catch {
+      setState('error')
+    }
+  }
+
+  if (state === 'idle') {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          handleInterpret()
+        }}
+        className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path
+            fillRule="evenodd"
+            d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.616a1 1 0 01.894-1.79l1.599.8L9 4.323V3a1 1 0 011-1z"
+            clipRule="evenodd"
+          />
+        </svg>
+        AI 解读
+      </button>
+    )
+  }
+
+  if (state === 'loading') {
+    return (
+      <div className="flex items-center gap-2 text-xs text-slate-400">
+        <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-indigo-300" />
+        AI 正在解读…
+      </div>
+    )
+  }
+
+  if (state === 'error') {
+    return <p className="text-xs text-slate-400">AI 解读暂不可用</p>
+  }
+
+  return (
+    <div className="rounded-lg border-l-2 border-indigo-300 bg-indigo-50/50 px-3 py-2.5 text-sm leading-relaxed text-slate-700">
+      {text}
+    </div>
+  )
+}
+
 
 function SignalDetailPanel({
   signal,
@@ -157,6 +222,12 @@ function SignalDetailPanel({
           <p className="mt-2 text-xs text-slate-500">
             按近 1 月收益排序（无则近 1 年），仅供参考，不构成投资建议。
           </p>
+        </div>
+      ) : null}
+
+      {signal.fund_code ? (
+        <div className="border-t border-slate-200 pt-4">
+          <AIInterpretation signal={signal} />
         </div>
       ) : null}
     </div>

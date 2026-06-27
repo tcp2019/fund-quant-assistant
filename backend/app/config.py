@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     auto_sync_hour: int = 20
     auto_sync_minute: int = 5
 
+    # LLM (AI signal interpretation)
+    llm_api_key: str | None = None
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
+
     class Config:
         env_file = ".env"
 
