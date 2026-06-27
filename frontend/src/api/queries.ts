@@ -30,6 +30,7 @@ export const queryKeys = {
     ['hotThemes', params] as const,
   backtestSensitivity: ['backtestSensitivity'] as const,
   backtestSnapshotStats: ['backtestSnapshotStats'] as const,
+  snapshots: ['snapshots'] as const,
   syncLogs: ['syncLogs'] as const,
   themes: ['themes'] as const,
   themeCandidates: (themeId: string, sortBy: string, limit: number) =>
@@ -58,6 +59,10 @@ export { updateStrategy }
 export { searchFunds }
 export { fetchThemes }
 export { fetchThemeCandidates }
+
+export async function fetchSnapshots() {
+  return api.get<import('../types').SnapshotsListOut>('/api/portfolio/snapshots')
+}
 
 export async function fetchSyncLogs(limit = 3) {
   return api.get<{ logs: import('../types').SyncLogEntry[] }>(

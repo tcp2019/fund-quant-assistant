@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
+import { useHoldings, useSnapshots } from '../api/hooks'
 import HoldingsTable from '../components/HoldingsTable'
-import type { Overview, SnapshotSummary } from '../types'
 import { profitLossToneClass } from '../utils/profitLoss'
 
 function formatCurrency(value: number) {
@@ -42,51 +40,19 @@ function formatValueChange(current: number, previous: number | null) {
 }
 
 export default function HoldingsPage() {
-  const [overview, setOverview] = useState<Overview | null>(null)
-  const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: overview, isLoading, error } = useHoldings()
+  const { data: snapshotsData } = useSnapshots()
 
-  useEffect(() => {
-    let cancelled = false
+  const snapshots = snapshotsData?.snapshots ?? []
 
-    async function loadHoldings() {
-      try {
-        const [holdingsData, snapshotsData] = await Promise.all([
-          api.get<Overview>('/api/portfolio/holdings'),
-          api.get<{ snapshots: SnapshotSummary[] }>('/api/portfolio/snapshots'),
-        ])
-        if (!cancelled) {
-          setOverview(holdingsData)
-          setSnapshots(snapshotsData.snapshots)
-          setError(null)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : '加载失败')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void loadHoldings()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  if (loading) {
+  if (isLoading) {
     return <p className="text-slate-500">加载中...</p>
   }
 
   if (error) {
     return (
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        无法加载持仓数据：{error}
+        无法加载持仓数据：{error instanceof Error ? error.message : '未知错误'}
       </div>
     )
   }

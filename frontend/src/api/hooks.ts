@@ -9,6 +9,7 @@ import {
   fetchOverview,
   fetchRisk,
   fetchSignals,
+  fetchSnapshots,
   fetchStrategy,
   fetchSyncLogs,
   queryKeys,
@@ -25,6 +26,10 @@ export function useOverview() {
 
 export function useHoldings() {
   return useQuery({ queryKey: queryKeys.holdings, queryFn: fetchHoldings })
+}
+
+export function useSnapshots() {
+  return useQuery({ queryKey: queryKeys.snapshots, queryFn: fetchSnapshots })
 }
 
 export function useSignals() {
