@@ -19,7 +19,7 @@ def compute_and_cache_metrics(session: Session, code: str) -> FundMetricsCache |
         return None
 
     rows = list(reversed(rows))
-    navs = [row.nav for row in rows]
+    navs = [row.acc_nav if row.acc_nav > 0 else row.nav for row in rows]
     returns = daily_returns_from_navs(navs)
     if len(returns) < 2:
         return None

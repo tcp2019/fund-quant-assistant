@@ -45,3 +45,18 @@ def test_compute_and_cache_metrics_insufficient_nav():
         )
         session.commit()
         assert compute_and_cache_metrics(session, "000001") is None
+
+
+def test_metrics_cache_uses_acc_nav(session):
+    from app.services.metrics_cache import compute_and_cache_metrics
+    from app.db.models import FundNavHistory
+
+    session.add(FundNavHistory(code="110011", date="2026-01-01", nav=1.0, acc_nav=2.0))
+    session.add(FundNavHistory(code="110011", date="2026-03-15", nav=0.9, acc_nav=2.2))
+    session.add(FundNavHistory(code="110011", date="2026-06-20", nav=0.8, acc_nav=2.4))
+    session.commit()
+
+    cache = compute_and_cache_metrics(session, "110011")
+    assert cache is not None
+    assert cache.return_1y is not None
+    assert cache.return_1y > 0  # Positive with acc_nav (2.4/2.0-1=0.20)
