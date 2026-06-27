@@ -10,6 +10,7 @@ import {
   fetchStrategy,
   fetchThemeCandidates,
   fetchThemes,
+  runBacktest,
   searchFunds,
   syncData,
   updateStrategy,
@@ -56,6 +57,7 @@ export { fetchSignals }
 export { fetchStrategy }
 export { fetchOpportunities }
 export { fetchHotThemes }
+export { runBacktest }
 export { syncData }
 export { updateStrategy }
 export { searchFunds }

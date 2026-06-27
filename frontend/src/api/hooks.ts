@@ -15,6 +15,7 @@ import {
   fetchStyleExposure,
   fetchSyncLogs,
   queryKeys,
+  runBacktest,
   syncData,
   updateStrategy,
 } from './queries'
@@ -131,6 +132,17 @@ export function useUpdateStrategy() {
     onSuccess: (data: StrategyConfig) => {
       queryClient.setQueryData(queryKeys.strategy, data)
       queryClient.invalidateQueries({ queryKey: queryKeys.signals })
+    },
+  })
+}
+
+export function useBacktestRun() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: runBacktest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.backtestSensitivity })
+      queryClient.invalidateQueries({ queryKey: queryKeys.backtestSnapshotStats })
     },
   })
 }

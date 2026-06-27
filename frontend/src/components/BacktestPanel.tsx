@@ -1,10 +1,14 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SensitivityReport, SnapshotStatsOut } from '../types'
+import { runBacktest } from '../api/client'
+import { queryKeys } from '../api/queries'
 
 const CATEGORY_LABELS: Record<string, string> = {
   stock: '股票型',
   bond: '债券型',
   money: '货币/理财',
   qdii: 'QDII/海外',
+  gold: '黄金',
   other: '其他',
 }
 
@@ -36,11 +40,64 @@ export default function BacktestPanel({
   sensitivity: SensitivityReport | null
   snapshotStats: SnapshotStatsOut | null
 }) {
+  const queryClient = useQueryClient()
+  const backtestMutation = useMutation({
+    mutationFn: runBacktest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.backtestSensitivity })
+      queryClient.invalidateQueries({ queryKey: queryKeys.backtestSnapshotStats })
+    },
+  })
+
   const currentThreshold =
     sensitivity?.scenarios.find((s) => s.triggered_categories > 0)?.threshold_pct ?? 5
 
   return (
     <div className="space-y-6">
+      <section>
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            type="button"
+            onClick={() => backtestMutation.mutate()}
+            disabled={backtestMutation.isPending}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {backtestMutation.isPending ? '回测中...' : '运行历史回测'}
+          </button>
+        </div>
+
+        {backtestMutation.isError ? (
+          <p className="mt-3 text-sm text-rose-600">
+            回测请求失败：{backtestMutation.error instanceof Error ? backtestMutation.error.message : '未知错误'}
+          </p>
+        ) : null}
+
+        {backtestMutation.isSuccess && backtestMutation.data ? (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 className="font-medium text-slate-900">回测结果</h4>
+            <div className="mt-2 grid gap-2 text-sm sm:grid-cols-3">
+              <div>
+                <span className="text-slate-500">测试快照数：</span>
+                <span className="font-mono text-slate-900">{backtestMutation.data.snapshots_tested}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">生成信号数：</span>
+                <span className="font-mono text-slate-900">{backtestMutation.data.signals_generated}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">命中率：</span>
+                <span className="font-mono text-slate-900">
+                  {backtestMutation.data.hit_rate !== null
+                    ? `${(backtestMutation.data.hit_rate * 100).toFixed(1)}%`
+                    : '—'}
+                </span>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">{backtestMutation.data.detail}</p>
+          </div>
+        ) : null}
+      </section>
+
       <section>
         <h3 className="text-lg font-medium text-slate-900">再平衡带宽敏感性</h3>
         <p className="mt-1 text-sm text-slate-500">

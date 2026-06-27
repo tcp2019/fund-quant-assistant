@@ -1,4 +1,5 @@
 import type {
+  BacktestResult,
   CorrelationOut,
   DataSyncResult,
   FundSearchOut,
@@ -190,4 +191,8 @@ export async function fetchBacktestSensitivity(): Promise<SensitivityReport> {
 
 export async function fetchBacktestSnapshotStats(): Promise<SnapshotStatsOut> {
   return api.get<SnapshotStatsOut>('/api/backtest/snapshot-stats')
+}
+
+export async function runBacktest(): Promise<BacktestResult> {
+  return api.post<BacktestResult>('/api/backtest/run', {})
 }

@@ -286,3 +286,11 @@ export interface MacroIndicators {
   environment: string
   available: boolean
 }
+
+export interface BacktestResult {
+  snapshots_tested: number
+  signals_generated: number
+  hit_rate: number | null
+  avg_excess_return: number | null
+  detail: string
+}
