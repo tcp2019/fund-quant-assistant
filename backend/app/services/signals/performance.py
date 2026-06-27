@@ -1,6 +1,10 @@
 EXCESS_RETURN_THRESHOLD = -0.05
 EXCESS_RETURN_REDUCE_THRESHOLD = -0.10
 PEER_UNDERPERFORM_PERCENTILE = 25.0
+ROLLING_SHARPE_MIN = 0.5
+CALMAR_MIN = 0.3
+DOWNSIDE_CAPTURE_MAX = 120.0
+INFO_RATIO_MIN = -0.5
 
 CATEGORY_THRESHOLDS: dict[str, dict[str, float]] = {
     "stock": {"sharpe_weak": 0.5, "max_drawdown_bad": -0.20},
@@ -78,11 +82,43 @@ def compute_performance_signals(
                 }
             )
 
+        rolling_sharpe_val = metrics.get("rolling_sharpe")
+        if rolling_sharpe_val is not None and rolling_sharpe_val < ROLLING_SHARPE_MIN:
+            reasons.append({
+                "layer": "performance",
+                "rule": "low_rolling_sharpe",
+                "detail": f"滚动夏普 {rolling_sharpe_val:.2f}，低于阈值 {ROLLING_SHARPE_MIN}，收益不稳定",
+            })
+
+        calmar_val = metrics.get("calmar")
+        if calmar_val is not None and calmar_val < CALMAR_MIN:
+            reasons.append({
+                "layer": "performance",
+                "rule": "low_calmar",
+                "detail": f"Calmar比率 {calmar_val:.2f}，低于阈值 {CALMAR_MIN}，回撤风险偏高",
+            })
+
+        downside_cap = metrics.get("downside_capture")
+        if downside_cap is not None and downside_cap > DOWNSIDE_CAPTURE_MAX:
+            reasons.append({
+                "layer": "performance",
+                "rule": "high_downside_capture",
+                "detail": f"下行捕获率 {downside_cap:.0f}%，高于 {DOWNSIDE_CAPTURE_MAX:.0f}%，跌时比基准跌得多",
+            })
+
+        info_r = metrics.get("info_ratio")
+        if info_r is not None and info_r < INFO_RATIO_MIN:
+            reasons.append({
+                "layer": "performance",
+                "rule": "low_info_ratio",
+                "detail": f"信息比率 {info_r:.2f}，低于阈值 {INFO_RATIO_MIN}，主动管理贡献不足",
+            })
+
         if not reasons:
             signal_type = "hold"
             detail = "业绩质量正常"
         elif (
-            len(reasons) >= 2
+            len(reasons) >= 3
             or (excess is not None and excess < EXCESS_RETURN_REDUCE_THRESHOLD)
             or (
                 peer_percentile is not None
