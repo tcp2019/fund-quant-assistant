@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchStrategy, refreshFundCatalog, syncData, updateStrategy } from '../api/client'
+import { refreshFundCatalog, updateStrategy } from '../api/client'
+import { useStrategy, useSyncData, useSyncLogs } from '../api/hooks'
 import type { Holding, Overview, StrategyConfig } from '../types'
 import {
   enableNotificationsWithPermission,
@@ -66,9 +67,17 @@ function formatWeightPct(value: number) {
 }
 
 export default function SettingsPage() {
-  const [loading, setLoading] = useState(true)
+  // ── Query hooks ──
+  const {
+    data: strategyData,
+    isLoading: strategyLoading,
+    error: strategyError,
+  } = useStrategy()
+  const syncMutation = useSyncData()
+  const { data: syncLogsData } = useSyncLogs(3)
+
+  // ── Local state ──
   const [saving, setSaving] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [refreshingCatalog, setRefreshingCatalog] = useState(false)
   const [notificationsEnabled, setNotificationsEnabledState] = useState(false)
   const [notificationPermission, setNotificationPermission] =
@@ -100,6 +109,20 @@ export default function SettingsPage() {
     setFundTargetWeights(config.fund_target_weights ?? {})
   }, [])
 
+  // Apply strategy data from query hook
+  useEffect(() => {
+    if (strategyData) {
+      applyConfig(strategyData)
+    }
+  }, [strategyData, applyConfig])
+
+  // Surface strategy loading error
+  useEffect(() => {
+    if (strategyError) {
+      setError(strategyError instanceof Error ? strategyError.message : '加载失败')
+    }
+  }, [strategyError])
+
   useEffect(() => {
     const permission = syncNotificationPreferenceWithPermission()
     setNotificationPermission(permission)
@@ -120,33 +143,6 @@ export default function SettingsPage() {
       document.removeEventListener('visibilitychange', refreshPermission)
     }
   }, [])
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      try {
-        const config = await fetchStrategy()
-        if (!cancelled) {
-          applyConfig(config)
-          setError(null)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : '加载失败')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [applyConfig])
 
   useEffect(() => {
     if (intraCategoryMode !== 'custom') {
@@ -228,11 +224,10 @@ export default function SettingsPage() {
   }
 
   async function handleSync() {
-    setSyncing(true)
     setError(null)
     setSuccess(null)
     try {
-      const result = await syncData()
+      const result = await syncMutation.mutateAsync(undefined)
       setSuccess(
         `数据同步完成，已更新 ${result.synced} 只基金` +
           (result.as_of_date ? `，净值截至 ${result.as_of_date}` : '') +
@@ -240,8 +235,6 @@ export default function SettingsPage() {
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : '同步失败')
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -308,7 +301,7 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) {
+  if (strategyLoading) {
     return <p className="text-slate-500">加载中...</p>
   }
 
@@ -682,6 +675,65 @@ export default function SettingsPage() {
         )}
       </section>
 
+      {/* Sync History Section */}
+      <section className="mt-10 border-t border-slate-200 pt-6">
+        <h3 className="text-lg font-semibold text-slate-900">同步历史</h3>
+        <p className="mt-1 text-sm text-slate-500">最近 3 次数据同步的执行结果</p>
+
+        {syncLogsData && syncLogsData.logs.length > 0 ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-slate-500">
+                  <th className="px-3 py-2 font-medium">时间</th>
+                  <th className="px-3 py-2 font-medium">状态</th>
+                  <th className="px-3 py-2 font-medium">成功/总数</th>
+                  <th className="px-3 py-2 font-medium">错误</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncLogsData.logs.map((log) => {
+                  const errors: Array<{ fund_code: string; stage: string; error: string }> =
+                    (() => { try { return JSON.parse(log.errors_json || '[]') } catch { return [] } })()
+                  const statusDisplay: Record<string, { text: string; color: string }> = {
+                    done: { text: '全部成功', color: 'text-emerald-700' },
+                    partial: { text: '部分失败', color: 'text-amber-700' },
+                    failed: { text: '全部失败', color: 'text-rose-700' },
+                    running: { text: '进行中', color: 'text-blue-700' },
+                  }
+                  const display = statusDisplay[log.status] ?? { text: log.status, color: 'text-slate-700' }
+
+                  return (
+                    <tr key={log.id} className="border-b border-slate-100">
+                      <td className="px-3 py-2 text-slate-700">
+                        {new Date(log.started_at).toLocaleString('zh-CN')}
+                      </td>
+                      <td className={`px-3 py-2 font-medium ${display.color}`}>
+                        {display.text}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-slate-700">
+                        {log.success_funds} / {log.total_funds}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {errors.length > 0
+                          ? errors.map((e, i) => (
+                              <span key={i} className="block text-xs">
+                                {e.fund_code}: {e.error}
+                              </span>
+                            ))
+                          : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-slate-500">暂无同步记录</p>
+        )}
+      </section>
+
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -694,10 +746,10 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={handleSync}
-          disabled={syncing}
+          disabled={syncMutation.isPending}
           className="inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {syncing ? '同步中...' : '同步数据'}
+          {syncMutation.isPending ? '同步中...' : '同步数据'}
         </button>
       </div>
     </div>
