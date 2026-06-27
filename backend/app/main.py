@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.backtest import router as backtest_router
 from app.api.routes.analysis import router as analysis_router
 from app.api.routes.opportunities import router as opportunities_router
+from app.api.routes.report import router as report_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.data import router as data_router
 from app.api.routes.funds import router as funds_router
@@ -64,6 +65,7 @@ app.include_router(signals_router)
 app.include_router(analysis_router)
 app.include_router(settings_router)
 app.include_router(opportunities_router)
+app.include_router(report_router)
 app.include_router(backtest_router)
 
 
