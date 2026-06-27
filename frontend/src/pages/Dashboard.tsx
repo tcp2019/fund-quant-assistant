@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, fetchHotThemes, fetchOpportunities } from '../api/client'
+import { useOverview, useOpportunities, useHotThemes } from '../api/hooks'
 import ActionSummaryCards from '../components/ActionSummaryCards'
 import AllocationChart from '../components/AllocationChart'
 import ConcentrationCard from '../components/ConcentrationCard'
@@ -8,78 +7,19 @@ import HotThemeRadar from '../components/HotThemeRadar'
 import HoldingsTable from '../components/HoldingsTable'
 import StatCard from '../components/StatCard'
 import ThemeExposurePanel from '../components/ThemeExposurePanel'
-import type { HotTheme, OpportunitiesOut, Overview } from '../types'
 import { formatCurrency, formatProfitAmount, formatSignedPercent } from '../utils/format'
 
 export default function Dashboard() {
-  const [overview, setOverview] = useState<Overview | null>(null)
-  const [opportunities, setOpportunities] = useState<OpportunitiesOut | null>(null)
-  const [hotThemes, setHotThemes] = useState<HotTheme[]>([])
-  const [loading, setLoading] = useState(true)
-  const [themesLoading, setThemesLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadDashboard() {
-      try {
-        const [overviewData, opportunitiesData] = await Promise.all([
-          api.get<Overview>('/api/portfolio/overview'),
-          fetchOpportunities({
-            sell_limit: 3,
-            buy_limit: 3,
-            explore_limit: 3,
-            include_hot_themes: false,
-          }),
-        ])
-        if (!cancelled) {
-          setOverview(overviewData)
-          setOpportunities(opportunitiesData)
-          setError(null)
-          setLoading(false)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : '加载失败')
-          setLoading(false)
-        }
-      }
-    }
-
-    void loadDashboard()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadHotThemes() {
-      try {
-        const themes = await fetchHotThemes({ theme_limit: 5 })
-        if (!cancelled) {
-          setHotThemes(themes)
-        }
-      } catch {
-        if (!cancelled) {
-          setHotThemes([])
-        }
-      } finally {
-        if (!cancelled) {
-          setThemesLoading(false)
-        }
-      }
-    }
-
-    void loadHotThemes()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const { data: overview, isLoading: loading, error } = useOverview()
+  const { data: opportunities } = useOpportunities({
+    sell_limit: 3,
+    buy_limit: 3,
+    explore_limit: 3,
+    include_hot_themes: false,
+  })
+  const { data: hotThemes = [], isLoading: themesLoading } = useHotThemes({
+    theme_limit: 5,
+  })
 
   if (loading) {
     return <p className="text-slate-500">加载中...</p>
@@ -88,7 +28,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        无法加载组合概览：{error}
+        无法加载组合概览：{error instanceof Error ? error.message : '未知错误'}
       </div>
     )
   }
@@ -113,7 +53,7 @@ export default function Dashboard() {
   const profitTone =
     overview.total_profit > 0 ? 'profit' : overview.total_profit < 0 ? 'loss' : 'default'
 
-  const opportunitiesWithThemes: OpportunitiesOut | null = opportunities
+  const opportunitiesWithThemes = opportunities
     ? { ...opportunities, hot_themes: hotThemes }
     : null
 
