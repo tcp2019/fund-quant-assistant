@@ -9,6 +9,8 @@ from app.repositories.portfolio import get_latest_snapshot
 from app.schemas.settings import DEFAULT_TEMPLATES, DEFAULT_THRESHOLDS
 from app.services.analysis import compute_correlation
 from app.services.fund_classifier import classify_fund
+from app.services.macro import fetch_macro_indicators
+from app.services.signals.adaptive_weights import get_adaptive_weights
 from app.services.signals.concentration import compute_concentration_signals
 from app.services.signals.consolidation import compute_consolidation_signals
 from app.services.signals.min_trade import apply_min_trade_to_signals
@@ -241,9 +243,11 @@ def aggregate_signals(
     intra_category_mode: str = "equal",
     fund_target_weights: dict[str, float] | None = None,
     overcrowded_categories: set[str] | None = None,
+    layer_weights: dict | None = None,
 ) -> list[dict]:
     market_value_by_code = market_value_by_code or {}
     category_targets = category_targets or {}
+    layer_weights = layer_weights or LAYER_WEIGHTS
     rebalance_by_cat = {signal["category"]: signal for signal in rebalance}
     conc_by_fund: dict[str, list[dict]] = defaultdict(list)
     for signal in concentration:
@@ -287,7 +291,7 @@ def aggregate_signals(
             intensity = min(abs(rebalance_signal["deviation_pct"]) / 20.0, 1.0)
             score += _layer_contribution(
                 rebalance_signal["signal_type"],
-                LAYER_WEIGHTS["rebalance"],
+                layer_weights["rebalance"],
                 intensity,
             )
             if rebalance_signal["signal_type"] == "add":
@@ -348,7 +352,7 @@ def aggregate_signals(
                 intensity = min((conc_signal["weight_pct"] - 25.0) / 25.0, 1.0)
             score += _layer_contribution(
                 conc_signal["signal_type"],
-                LAYER_WEIGHTS["concentration"],
+                layer_weights["concentration"],
                 intensity,
             )
             rule = (
@@ -369,7 +373,7 @@ def aggregate_signals(
             intensity = min(max(len(perf_signal.get("reasons", [])), 1) / 3.0, 1.0)
             score += _layer_contribution(
                 perf_signal["signal_type"],
-                LAYER_WEIGHTS["performance"],
+                layer_weights["performance"],
                 intensity,
             )
             reasons.extend(perf_signal.get("reasons", []))
@@ -402,7 +406,7 @@ def aggregate_signals(
             continue
         intensity = min(abs(rebalance_signal["deviation_pct"]) / 20.0, 1.0)
         category_score = round(
-            _layer_contribution("add", LAYER_WEIGHTS["rebalance"], intensity), 2
+            _layer_contribution("add", layer_weights["rebalance"], intensity), 2
         )
         label = CATEGORY_LABELS.get(rebalance_signal["category"], rebalance_signal["category"])
         results.append(
@@ -431,7 +435,7 @@ def aggregate_signals(
             continue
         intensity = min(abs(rebalance_signal["deviation_pct"]) / 20.0, 1.0)
         category_score = round(
-            _layer_contribution("reduce", LAYER_WEIGHTS["rebalance"], intensity), 2
+            _layer_contribution("reduce", layer_weights["rebalance"], intensity), 2
         )
         label = CATEGORY_LABELS.get(rebalance_signal["category"], rebalance_signal["category"])
         results.append(
@@ -461,10 +465,12 @@ def aggregate_signals(
 def append_review_signals(
     results: list[dict],
     review: list[dict],
+    layer_weights: dict | None = None,
 ) -> list[dict]:
+    layer_weights = layer_weights or LAYER_WEIGHTS
     for signal in review:
         label = CATEGORY_LABELS.get(signal["category"], signal["category"])
-        score = round(_layer_contribution("watch", LAYER_WEIGHTS["rebalance"], 0.5), 2)
+        score = round(_layer_contribution("watch", layer_weights["rebalance"], 0.5), 2)
         results.append(
             {
                 "fund_code": "",
@@ -491,10 +497,12 @@ def append_review_signals(
 def append_consolidation_signals(
     results: list[dict],
     consolidation: list[dict],
+    layer_weights: dict | None = None,
 ) -> list[dict]:
+    layer_weights = layer_weights or LAYER_WEIGHTS
     for signal in consolidation:
         label = CATEGORY_LABELS.get(signal["category"], signal["category"])
-        score = round(_layer_contribution("watch", LAYER_WEIGHTS["concentration"], 1.0), 2)
+        score = round(_layer_contribution("watch", layer_weights["concentration"], 1.0), 2)
         results.append(
             {
                 "fund_code": "",
@@ -611,6 +619,10 @@ def run_signal_engine(session: Session) -> list[SignalRecord]:
         if created.tzinfo is not None:
             created = created.replace(tzinfo=None)
         days_since_snapshot = (datetime.utcnow() - created).days
+
+    macro = fetch_macro_indicators()
+    adaptive_weights = get_adaptive_weights(macro.get("environment", "neutral"))
+
     force_review = days_since_snapshot >= thresholds.get("rebalance_force_days", 365)
     rebalance = compute_rebalance_signals(
         dict(category_weights),
@@ -661,9 +673,10 @@ def run_signal_engine(session: Session) -> list[SignalRecord]:
         intra_category_mode=intra_category_mode,
         fund_target_weights=fund_target_weights,
         overcrowded_categories=overcrowded_categories,
+        layer_weights=adaptive_weights,
     )
-    aggregated = append_consolidation_signals(aggregated, consolidation)
-    aggregated = append_review_signals(aggregated, review)
+    aggregated = append_consolidation_signals(aggregated, consolidation, adaptive_weights)
+    aggregated = append_review_signals(aggregated, review, adaptive_weights)
     aggregated = apply_min_trade_to_signals(
         aggregated, thresholds.get("min_suggested_trade_cny", 500.0)
     )
