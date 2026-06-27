@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 
-> **Status:** active | **Created:** 2026-06-27
+> **Status:** completed | **Created:** 2026-06-27
 > **Spec:** docs/superpowers/specs/active/2026-06-27-adaptive-onboarding-pwa-design.md
 
 **Goal:** 动态权重、新手引导、PWA
