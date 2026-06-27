@@ -4,6 +4,7 @@ import ActionSummaryCards from '../components/ActionSummaryCards'
 import AllocationChart from '../components/AllocationChart'
 import ConcentrationCard from '../components/ConcentrationCard'
 import HotThemeRadar from '../components/HotThemeRadar'
+import OnboardingGuide from '../components/OnboardingGuide'
 import HoldingsTable from '../components/HoldingsTable'
 import StatCard from '../components/StatCard'
 import ThemeExposurePanel from '../components/ThemeExposurePanel'
@@ -36,17 +37,20 @@ export default function Dashboard() {
 
   if (!overview || overview.holdings.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-        <h2 className="text-xl font-semibold text-slate-900">还没有持仓数据</h2>
-        <p className="mt-2 text-slate-500">
-          通过 OCR 导入或手动录入第一笔持仓，即可在这里查看总览。
-        </p>
-        <Link
-          to="/import"
-          className="mt-6 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          去导入持仓
-        </Link>
+      <div className="space-y-6">
+        <OnboardingGuide />
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
+          <h2 className="text-xl font-semibold text-slate-900">还没有持仓数据</h2>
+          <p className="mt-2 text-slate-500">
+            通过 OCR 导入或手动录入第一笔持仓，即可在这里查看总览。
+          </p>
+          <Link
+            to="/import"
+            className="mt-6 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            去导入持仓
+          </Link>
+        </div>
       </div>
     )
   }
