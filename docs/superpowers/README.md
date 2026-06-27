@@ -46,4 +46,4 @@ docs/superpowers/
 | v1.4 机会中心 + 热点雷达 | [2026-06-22-opportunities-hotspot-radar-design.md](specs/active/2026-06-22-opportunities-hotspot-radar-design.md) | — | [plan](plans/completed/2026-06-22-opportunities-hotspot-radar.md) |
 | v1.5 组合管理基础 A/B/C/D | [2026-06-22-portfolio-management-foundation-design.md](specs/active/2026-06-22-portfolio-management-foundation-design.md) | — | [plan](plans/completed/2026-06-22-portfolio-management-foundation.md) |
 | v1.6 信号一致性 · 结构优先 | [2026-06-22-signal-coherence-structural-first-design.md](specs/active/2026-06-22-signal-coherence-structural-first-design.md) | — | [plan](plans/completed/2026-06-22-signal-coherence-structural-first.md) |
-| v1.7 数据质量与体验增强 | [2026-06-27-data-quality-and-ux-enhancement-design.md](specs/active/2026-06-27-data-quality-and-ux-enhancement-design.md) | [plan](plans/active/2026-06-27-data-quality-and-ux-enhancement.md) | — |
+| v1.7 数据质量与体验增强 | [2026-06-27-data-quality-and-ux-enhancement-design.md](specs/active/2026-06-27-data-quality-and-ux-enhancement-design.md) | [plan](plans/completed/2026-06-27-data-quality-and-ux-enhancement.md) | — |
