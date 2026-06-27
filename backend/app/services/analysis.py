@@ -14,12 +14,14 @@ CORRELATION_LOOKBACK_DAYS = 90
 RISK_LOOKBACK_DAYS = 252
 
 
-def _nav_by_date(session: Session, code: str) -> dict[str, float]:
+def _nav_by_date(session: Session, code: str, use_acc_nav: bool = True) -> dict[str, float]:
     rows = session.exec(
         select(FundNavHistory)
         .where(FundNavHistory.code == code)
         .order_by(FundNavHistory.date)
     ).all()
+    if use_acc_nav and not any(row.acc_nav == 0 for row in rows):
+        return {row.date: row.acc_nav for row in rows}
     return {row.date: row.nav for row in rows}
 
 
@@ -27,11 +29,12 @@ def _aligned_nav_series(
     session: Session,
     fund_codes: list[str],
     lookback_trading_days: int,
+    use_acc_nav: bool = True,
 ) -> tuple[list[str], list[list[float]]]:
     if not fund_codes:
         return [], []
 
-    nav_maps = {code: _nav_by_date(session, code) for code in fund_codes}
+    nav_maps = {code: _nav_by_date(session, code, use_acc_nav) for code in fund_codes}
 
     common_dates = None
     for code in fund_codes:
