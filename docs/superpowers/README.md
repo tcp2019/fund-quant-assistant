@@ -47,4 +47,4 @@ docs/superpowers/
 | v1.5 组合管理基础 A/B/C/D | [2026-06-22-portfolio-management-foundation-design.md](specs/active/2026-06-22-portfolio-management-foundation-design.md) | — | [plan](plans/completed/2026-06-22-portfolio-management-foundation.md) |
 | v1.6 信号一致性 · 结构优先 | [2026-06-22-signal-coherence-structural-first-design.md](specs/active/2026-06-22-signal-coherence-structural-first-design.md) | — | [plan](plans/completed/2026-06-22-signal-coherence-structural-first.md) |
 | v1.7 数据质量与体验增强 | [2026-06-27-data-quality-and-ux-enhancement-design.md](specs/active/2026-06-27-data-quality-and-ux-enhancement-design.md) | [plan](plans/completed/2026-06-27-data-quality-and-ux-enhancement.md) | — |
-| v1.8 NAV复权+业绩增强+定期报告 | [2026-06-27-nav-accuracy-signals-report-design.md](specs/active/2026-06-27-nav-accuracy-signals-report-design.md) | — | — |
+| v1.8 NAV复权+业绩增强+定期报告 | [2026-06-27-nav-accuracy-signals-report-design.md](specs/active/2026-06-27-nav-accuracy-signals-report-design.md) | [plan](plans/active/2026-06-27-nav-accuracy-signals-report.md) | — |
