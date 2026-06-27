@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 import re
 
+import ipaddress
+from urllib.parse import urlparse
+
 import httpx
 
 from app.config import settings
@@ -128,10 +131,99 @@ def _build_messages(
     ]
 
 
+def _normalize_base_url(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    # ponytail: DeepSeek official base is without /v1; old UI default misled users
+    if "api.deepseek.com" in base and base.endswith("/v1"):
+        return base[:-3]
+    return base
+
+
+def _completions_url(base_url: str) -> str:
+    base = _normalize_base_url(base_url)
+    if base.endswith("/chat/completions"):
+        return base
+    return f"{base}/chat/completions"
+
+
+_BLOCKED_LLM_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+
+
+def _llm_base_url_error(base_url: str) -> str | None:
+    """Reject loopback/private literal hosts; ponytail: no DNS resolve."""
+    parsed = urlparse(base_url if "://" in base_url else f"https://{base_url}")
+    if parsed.scheme not in ("http", "https"):
+        return "接口地址须为 http 或 https"
+    host = (parsed.hostname or "").lower()
+    if not host or host in _BLOCKED_LLM_HOSTS:
+        return "接口地址不可用"
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return "接口地址不可用"
+    except ValueError:
+        pass
+    return None
+
+
+def _chat_payload(base_url: str, *, model: str, messages: list, max_tokens: int) -> dict:
+    payload: dict = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.3,
+    }
+    if "deepseek" in base_url.lower():
+        payload["thinking"] = {"type": "disabled"}
+    return payload
+
+
+def _extract_message_content(choice: dict) -> str | None:
+    message = choice.get("message", {}) or {}
+    content = (message.get("content") or "").strip()
+    if content:
+        return content
+    # ponytail: V4 thinking mode puts text in reasoning_content when content is empty
+    reasoning = (message.get("reasoning_content") or "").strip()
+    return reasoning or None
+
+
+async def _chat_completion(
+    messages: list[dict[str, str]],
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    max_tokens: int = 256,
+) -> str | None:
+    if err := _llm_base_url_error(base_url):
+        raise ValueError(err)
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            _completions_url(base_url),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=_chat_payload(
+                base_url, model=model, messages=messages, max_tokens=max_tokens
+            ),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices", [])
+        if not choices:
+            return None
+        return _extract_message_content(choices[0])
+
+
 async def interpret_signal(
     signal_dict: dict,
     *,
     api_key_override: str | None = None,
+    base_url_override: str | None = None,
+    model_override: str | None = None,
     total_value: float = 0.0,
     weight_pct: float = 0.0,
 ) -> str | None:
@@ -143,30 +235,59 @@ async def interpret_signal(
     if not api_key:
         return None
 
+    base_url = base_url_override or settings.llm_base_url
+    model = model_override or settings.llm_model
     messages = _build_messages(signal_dict, total_value, weight_pct)
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                f"{settings.llm_base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.llm_model,
-                    "messages": messages,
-                    "max_tokens": 256,
-                    "temperature": 0.3,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            choices = data.get("choices", [])
-            if not choices:
-                return None
-            content = choices[0].get("message", {}).get("content", "")
-            return content.strip() if content else None
+        return await _chat_completion(
+            messages,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+        )
     except Exception:
         logger.warning("LLM interpretation failed", exc_info=True)
         return None
+
+
+async def test_llm_connection(
+    *,
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
+    model_override: str | None = None,
+) -> tuple[bool, str | None]:
+    """Ping the LLM API. Returns (ok, error_message)."""
+    api_key = api_key_override or settings.llm_api_key
+    if not api_key:
+        return False, "未配置 API Key"
+
+    base_url = base_url_override or settings.llm_base_url
+    model = model_override or settings.llm_model
+    if url_err := _llm_base_url_error(base_url):
+        return False, url_err
+    messages = [{"role": "user", "content": "回复：连接成功"}]
+
+    try:
+        content = await _chat_completion(
+            messages,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            max_tokens=16,
+        )
+        if content:
+            return True, None
+        return False, "模型返回为空（若使用 DeepSeek V4，请确认接口地址为 https://api.deepseek.com）"
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status == 401:
+            return False, "API Key 无效或已过期"
+        if status == 404:
+            return False, "接口地址或模型名称不正确"
+        return False, f"请求失败（HTTP {status}）"
+    except httpx.TimeoutException:
+        return False, "连接超时，请检查网络或接口地址"
+    except Exception:
+        logger.warning("LLM connection test failed", exc_info=True)
+        return False, "连接失败，请检查 Key、接口地址与模型"

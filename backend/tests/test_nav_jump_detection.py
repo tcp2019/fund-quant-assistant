@@ -1,4 +1,5 @@
 from app.services.data_sync import detect_nav_jump
+from app.services.nav_thresholds import NAV_DAILY_CHANGE_THRESHOLD
 
 
 def test_detect_normal_navs():

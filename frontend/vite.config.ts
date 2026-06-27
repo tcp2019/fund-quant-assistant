@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: '基金量化助手',
+        name: '基金持仓管家',
         short_name: '基金助手',
         theme_color: '#0f172a',
         icons: []

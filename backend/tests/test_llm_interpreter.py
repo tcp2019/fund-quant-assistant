@@ -4,7 +4,7 @@ import httpx
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.services.llm_interpreter import _build_messages, _build_user_message, interpret_signal
+from app.services.llm_interpreter import _build_messages, _build_user_message, interpret_signal, test_llm_connection
 
 
 def test_build_user_message_reduce_signal():
@@ -153,3 +153,68 @@ async def test_interpret_signal_api_key_override(monkeypatch):
 
     assert result == "ok"
     assert last_key == "Bearer sk-override"
+
+
+def test_completions_url_deepseek_strips_v1_suffix():
+    from app.services.llm_interpreter import _completions_url
+
+    assert _completions_url("https://api.deepseek.com/v1") == "https://api.deepseek.com/chat/completions"
+    assert _completions_url("https://api.openai.com/v1") == "https://api.openai.com/v1/chat/completions"
+
+
+def test_extract_message_content_reasoning_fallback():
+    from app.services.llm_interpreter import _extract_message_content
+
+    choice = {"message": {"content": "", "reasoning_content": "思考过程"}}
+    assert _extract_message_content(choice) == "思考过程"
+
+
+def test_chat_payload_thinking_only_for_deepseek():
+    from app.services.llm_interpreter import _chat_payload
+
+    openai = _chat_payload("https://api.openai.com/v1", model="gpt-4o", messages=[], max_tokens=16)
+    assert "thinking" not in openai
+
+    deepseek = _chat_payload(
+        "https://api.deepseek.com", model="deepseek-v4-flash", messages=[], max_tokens=16
+    )
+    assert deepseek["thinking"] == {"type": "disabled"}
+
+
+def test_llm_base_url_blocks_loopback():
+    from app.services.llm_interpreter import _llm_base_url_error
+
+    assert _llm_base_url_error("http://127.0.0.1/v1") == "接口地址不可用"
+    assert _llm_base_url_error("https://api.openai.com/v1") is None
+
+
+@pytest.mark.asyncio
+async def test_test_llm_connection_blocks_private_host(monkeypatch):
+    monkeypatch.setattr("app.services.llm_interpreter.settings.llm_api_key", "sk-test")
+    ok, error = await test_llm_connection(base_url_override="http://127.0.0.1/v1")
+    assert ok is False
+    assert error == "接口地址不可用"
+
+
+@pytest.mark.asyncio
+async def test_test_llm_connection_no_api_key(monkeypatch):
+    monkeypatch.setattr("app.services.llm_interpreter.settings.llm_api_key", None)
+    ok, error = await test_llm_connection()
+    assert ok is False
+    assert error == "未配置 API Key"
+
+
+@pytest.mark.asyncio
+async def test_test_llm_connection_success(monkeypatch):
+    monkeypatch.setattr("app.services.llm_interpreter.settings.llm_api_key", "sk-test")
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=_fake_response("连接成功"))
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        ok, error = await test_llm_connection()
+
+    assert ok is True
+    assert error is None

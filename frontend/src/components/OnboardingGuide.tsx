@@ -14,7 +14,7 @@ export default function OnboardingGuide() {
 
   return (
     <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-8">
-      <h2 className="text-xl font-semibold text-indigo-900">欢迎使用基金量化助手</h2>
+      <h2 className="text-xl font-semibold text-indigo-900">欢迎使用基金持仓管家</h2>
       <p className="mt-2 text-indigo-700">按照以下 3 步开始使用：</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <div className="rounded-lg bg-white p-4 shadow-sm">
@@ -35,9 +35,9 @@ export default function OnboardingGuide() {
         </div>
         <div className="rounded-lg bg-white p-4 shadow-sm">
           <div className="text-2xl">3️⃣</div>
-          <h3 className="mt-2 font-medium text-slate-900">查看信号</h3>
-          <p className="mt-1 text-sm text-slate-500">系统自动生成买卖建议</p>
-          <Link to="/signals" className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-800">
+          <h3 className="mt-2 font-medium text-slate-900">查看本周建议</h3>
+          <p className="mt-1 text-sm text-slate-500">系统会告诉你要不要调整、调整什么</p>
+          <Link to="/advice" className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-800">
             去查看 →
           </Link>
         </div>

@@ -171,3 +171,29 @@ def test_put_strategy_reruns_signal_engine():
     with Session(engine) as session:
         records = session.exec(select(SignalRecord)).all()
         assert len(records) > 0
+
+
+def test_llm_test_endpoint_no_key():
+    from unittest.mock import patch
+
+    with patch("app.api.routes.settings.test_llm_connection", return_value=(False, "未配置 API Key")):
+        resp = client.post("/api/settings/llm/test", json={})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["error"] == "未配置 API Key"
+
+
+def test_llm_test_endpoint_success():
+    from unittest.mock import AsyncMock, patch
+
+    async def mock_test(**kwargs):
+        return True, None
+
+    with patch("app.api.routes.settings.test_llm_connection", new=AsyncMock(side_effect=mock_test)):
+        resp = client.post(
+            "/api/settings/llm/test",
+            json={"api_key": "sk-test", "base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True

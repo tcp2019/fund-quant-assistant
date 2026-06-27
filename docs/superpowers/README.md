@@ -54,3 +54,7 @@ docs/superpowers/
 | v2.2 数据质量增强+信号展示优化 | [2026-06-27-data-quality-v22-design.md](specs/active/2026-06-27-data-quality-v22-design.md) | [plan](plans/completed/2026-06-27-data-quality-v22.md) | — |
 | v2.3 AI 信号解读 | [2026-06-27-ai-signal-interpretation-design.md](specs/active/2026-06-27-ai-signal-interpretation-design.md) | [plan](plans/completed/2026-06-27-ai-signal-interpretation.md) | — |
 | v2.4 净值实时化 | [2026-06-27-nav-realtime-design.md](specs/active/2026-06-27-nav-realtime-design.md) | [plan](plans/completed/2026-06-27-nav-realtime.md) | — |
+| v2.5 今日盈亏与净值异动 | [2026-06-27-nav-daily-change-design.md](specs/active/2026-06-27-nav-daily-change-design.md) | [plan](plans/completed/2026-06-27-nav-daily-change.md) | — |
+| v2.6 产品收敛 · 普通投资者体验 | [2026-06-27-retail-ux-convergence-design.md](specs/active/2026-06-27-retail-ux-convergence-design.md) | [plan](plans/completed/2026-06-27-retail-ux-convergence.md) | — |
+| v2.6.1 LLM 设置闭环 | [2026-06-27-llm-settings-ui-design.md](specs/active/2026-06-27-llm-settings-ui-design.md) | [plan](plans/completed/2026-06-28-llm-settings-ui.md) | — |
+| v2.7 组合每日盈亏曲线 | [2026-06-28-daily-profit-history-design.md](specs/active/2026-06-28-daily-profit-history-design.md) | [plan](plans/completed/2026-06-28-daily-profit-history.md) | — |

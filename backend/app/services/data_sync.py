@@ -15,6 +15,7 @@ from app.services.fund_themes import detect_themes
 from app.services.holdings_revalue import revalue_holdings
 from app.services.http_retry import with_retry as _with_retry
 from app.services.metrics_cache import compute_and_cache_metrics
+from app.services.nav_thresholds import NAV_DAILY_CHANGE_THRESHOLD
 from app.services.peer_metrics import fetch_peer_return_percentile_3m, parse_user_themes
 
 
@@ -168,9 +169,6 @@ def sync_purchase_limits(session: Session, codes: list[str]) -> int:
 
     session.commit()
     return updated
-
-
-NAV_DAILY_CHANGE_THRESHOLD = 0.15  # 日涨跌超过 15% 视为异常
 
 
 def detect_nav_jump(navs: list[dict[str, Any]]) -> list[dict[str, Any]]:

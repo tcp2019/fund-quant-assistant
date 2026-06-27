@@ -41,23 +41,25 @@ export function scoreTextClass(score: number) {
 }
 
 export const REASON_RULE_LABELS: Record<string, string> = {
-  add: '增配',
-  reduce: '减配',
-  category_underweight: '大类低配',
-  category_overweight: '大类超配',
-  single_fund_concentration: '集中度',
-  high_correlation: '高相关',
+  add: '建议加仓',
+  reduce: '建议减仓',
+  category_underweight: '买少了',
+  category_overweight: '买太多了',
+  single_fund_concentration: '占比过高',
+  high_correlation: '走势太像',
   no_action: '无需调整',
-  excess_return_1y: '超额收益',
-  sharpe_1y: '夏普比率',
-  max_drawdown_1y: '最大回撤',
+  excess_return_1y: '跑输基准',
+  sharpe_1y: '风险收益比偏低',
+  max_drawdown_1y: '跌得较多',
   purchase_limit_blocked: '限购受阻',
   purchase_suspended: '暂停申购',
   redemption_hard_to_rebuy: '卖出难买回',
-  performance_blocked_add: '业绩过滤',
-  performance_prioritized_reduce: '减配优先',
-  category_overcrowded: '持仓过多',
-  below_min_trade: '低于最小交易额',
+  performance_blocked_add: '业绩偏弱',
+  performance_prioritized_reduce: '优先减仓',
+  category_overcrowded: '同类基金太多',
+  below_min_trade: '金额太小',
+  consolidation_blocked_add: '需先整理持仓',
+  rebalance_review_due: '该整体看一眼',
 }
 
 export function formatReasonRule(rule: string) {

@@ -171,7 +171,7 @@ export function showDesktopNotification(
 
 export async function showTestNotification(): Promise<DesktopNotificationResult> {
   return showDesktopNotification({
-    title: '基金量化助手',
+    title: '基金持仓管家',
     body: '通知功能已开启。强买卖信号将在数据同步后出现提醒。',
   })
 }
@@ -209,7 +209,7 @@ export function maybeNotifyStrongSignals(summary: StrongSignalSummary) {
   }
 
   void showDesktopNotification({
-    title: '基金量化助手',
+    title: '基金持仓管家',
     body: `同步完成，${parts.join(' / ')}强信号待查看`,
   })
 

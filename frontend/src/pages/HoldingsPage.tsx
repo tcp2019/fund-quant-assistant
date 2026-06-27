@@ -74,12 +74,20 @@ export default function HoldingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-900">持仓明细</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          当前快照 #{overview.snapshot_id ?? '—'} · 总市值{' '}
-          {formatCurrency(overview.total_value)}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold text-slate-900">持仓明细</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            当前快照 #{overview.snapshot_id ?? '—'} · 总市值{' '}
+            {formatCurrency(overview.total_value)}
+          </p>
+        </div>
+        <Link
+          to="/import"
+          className="inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          导入 / 更新持仓
+        </Link>
       </div>
 
       <HoldingsTable holdings={overview.holdings} />

@@ -35,6 +35,8 @@ class SignalOut(BaseModel):
 
 class InterpretRequest(BaseModel):
     api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
 
 
 class InterpretOut(BaseModel):

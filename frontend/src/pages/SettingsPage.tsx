@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { refreshFundCatalog, updateStrategy } from '../api/client'
+import { refreshFundCatalog, testLlmConnection, updateStrategy } from '../api/client'
 import { useStrategy, useSyncData, useSyncLogs } from '../api/hooks'
 import type { Holding, Overview, StrategyConfig } from '../types'
 import {
@@ -16,6 +16,14 @@ import {
   type DesktopNotificationPayload,
   type NotificationPermissionState,
 } from '../utils/notifications'
+import {
+  DEFAULT_LLM_BASE_URL,
+  DEFAULT_LLM_MODEL,
+  getLlmApiKey,
+  getLlmBaseUrl,
+  getLlmModel,
+  saveLlmSettings,
+} from '../utils/llmSettings'
 
 const TEMPLATE_OPTIONS = [
   { value: 'conservative', label: '保守型' },
@@ -97,6 +105,13 @@ export default function SettingsPage() {
     useState<StrategyConfig['intra_category_mode']>('equal')
   const [fundTargetWeights, setFundTargetWeights] = useState<Record<string, number>>({})
   const [holdingsForCustom, setHoldingsForCustom] = useState<Holding[]>([])
+  const [llmApiKey, setLlmApiKey] = useState('')
+  const [llmBaseUrl, setLlmBaseUrl] = useState(DEFAULT_LLM_BASE_URL)
+  const [llmModel, setLlmModel] = useState(DEFAULT_LLM_MODEL)
+  const [llmTesting, setLlmTesting] = useState(false)
+  const [llmDialog, setLlmDialog] = useState<{ ok: boolean; title: string; message: string } | null>(
+    null,
+  )
 
   const applyConfig = useCallback((config: StrategyConfig) => {
     setTemplateName(config.template_name)
@@ -122,6 +137,12 @@ export default function SettingsPage() {
       setError(strategyError instanceof Error ? strategyError.message : '加载失败')
     }
   }, [strategyError])
+
+  useEffect(() => {
+    setLlmApiKey(getLlmApiKey())
+    setLlmBaseUrl(getLlmBaseUrl())
+    setLlmModel(getLlmModel())
+  }, [])
 
   useEffect(() => {
     const permission = syncNotificationPreferenceWithPermission()
@@ -252,6 +273,48 @@ export default function SettingsPage() {
     }
   }
 
+  function handleSaveLlmSettings() {
+    saveLlmSettings(llmApiKey, llmBaseUrl, llmModel)
+    setLlmDialog({
+      ok: true,
+      title: '已保存',
+      message: 'AI 解读设置已保存到本机浏览器',
+    })
+  }
+
+  async function handleTestLlmConnection() {
+    setLlmTesting(true)
+    try {
+      const result = await testLlmConnection({
+        ...(llmApiKey.trim() ? { api_key: llmApiKey.trim() } : {}),
+        base_url: llmBaseUrl.trim() || DEFAULT_LLM_BASE_URL,
+        model: llmModel.trim() || DEFAULT_LLM_MODEL,
+      })
+      if (result.ok) {
+        saveLlmSettings(llmApiKey, llmBaseUrl, llmModel)
+        setLlmDialog({
+          ok: true,
+          title: '连接成功',
+          message: 'LLM 连接成功，设置已保存到本机浏览器',
+        })
+      } else {
+        setLlmDialog({
+          ok: false,
+          title: '连接失败',
+          message: result.error ?? '连接失败',
+        })
+      }
+    } catch (err) {
+      setLlmDialog({
+        ok: false,
+        title: '连接失败',
+        message: err instanceof Error ? err.message : '连接测试失败',
+      })
+    } finally {
+      setLlmTesting(false)
+    }
+  }
+
   async function handleRequestNotificationPermission() {
     setError(null)
     setSuccess(null)
@@ -279,7 +342,7 @@ export default function SettingsPage() {
     setNotificationPreview(null)
 
     const payload: DesktopNotificationPayload = {
-      title: '基金量化助手',
+      title: '基金持仓管家',
       body: '通知功能已开启。强买卖信号将在数据同步后出现提醒。',
     }
 
@@ -315,7 +378,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold text-slate-900">设置</h2>
-        <p className="mt-1 text-sm text-slate-500">配置目标资产配置与信号阈值</p>
+        <p className="mt-1 text-sm text-slate-500">风险偏好、数据同步与通知</p>
       </div>
 
       {error ? (
@@ -331,8 +394,8 @@ export default function SettingsPage() {
       ) : null}
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-medium text-slate-900">策略模板</h3>
-        <p className="mt-1 text-sm text-slate-500">选择预设模板或自定义各类资产目标占比</p>
+        <h3 className="text-lg font-medium text-slate-900">风险偏好</h3>
+        <p className="mt-1 text-sm text-slate-500">选择保守、均衡或进取，决定各类资产的目标占比</p>
 
         <div className="mt-4">
           <label htmlFor="template" className="block text-sm font-medium text-slate-700">
@@ -353,46 +416,134 @@ export default function SettingsPage() {
         </div>
 
         <div className="mt-6">
-          <h4 className="text-sm font-medium text-slate-700">目标权重</h4>
-          <div className="mt-3 space-y-3">
-            {Object.entries(CATEGORY_LABELS).map(([category, label]) => (
-              <div key={category} className="flex items-center gap-4">
-                <span className="w-24 text-sm text-slate-600">{label}</span>
-                {isCustom ? (
-                  <div className="flex flex-1 items-center gap-3">
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={Math.round((targetWeights[category] ?? 0) * 100)}
-                      onChange={(event) =>
-                        handleWeightChange(category, Number(event.target.value))
-                      }
-                      className="flex-1"
-                    />
-                    <span className="w-12 text-right font-mono text-sm text-slate-700">
-                      {Math.round((targetWeights[category] ?? 0) * 100)}%
+          {isCustom ? (
+            <>
+              <h4 className="text-sm font-medium text-slate-700">自定义大类权重</h4>
+              <div className="mt-3 space-y-3">
+                {Object.entries(CATEGORY_LABELS).map(([category, label]) => (
+                  <div key={category} className="flex items-center gap-4">
+                    <span className="w-24 text-sm text-slate-600">{label}</span>
+                    <div className="flex flex-1 items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={Math.round((targetWeights[category] ?? 0) * 100)}
+                        onChange={(event) =>
+                          handleWeightChange(category, Number(event.target.value))
+                        }
+                        className="flex-1"
+                      />
+                      <span className="w-12 text-right font-mono text-sm text-slate-700">
+                        {Math.round((targetWeights[category] ?? 0) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p
+                className={`mt-2 text-xs ${Math.abs(weightSum - 1) < 0.01 ? 'text-slate-500' : 'text-rose-600'}`}
+              >
+                合计 {Math.round(weightSum * 100)}%（需等于 100%）
+              </p>
+            </>
+          ) : (
+            <>
+              <h4 className="text-sm font-medium text-slate-700">目标占比一览</h4>
+              <div className="mt-3 space-y-3">
+                {Object.entries(CATEGORY_LABELS).map(([category, label]) => (
+                  <div key={category} className="flex items-center gap-4">
+                    <span className="w-24 text-sm text-slate-600">{label}</span>
+                    <span className="font-mono text-sm text-slate-700">
+                      {formatWeightPct(targetWeights[category] ?? 0)}
                     </span>
                   </div>
-                ) : (
-                  <span className="font-mono text-sm text-slate-700">
-                    {formatWeightPct(targetWeights[category] ?? 0)}
-                  </span>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
-          {isCustom ? (
-            <p
-              className={`mt-2 text-xs ${Math.abs(weightSum - 1) < 0.01 ? 'text-slate-500' : 'text-rose-600'}`}
-            >
-              合计 {Math.round(weightSum * 100)}%（需等于 100%）
-            </p>
-          ) : null}
+            </>
+          )}
         </div>
+      </section>
 
-        <div className="mt-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-medium text-slate-900">AI 信号解读</h3>
+        <p className="mt-1 text-sm text-slate-500">
+          在「本周建议」中点击 AI 解读，用通俗语言解释信号含义。Key 仅保存在本机浏览器，不会写入服务器。
+        </p>
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <label htmlFor="llm-api-key" className="block text-sm font-medium text-slate-700">
+              API Key
+            </label>
+            <input
+              id="llm-api-key"
+              type="password"
+              value={llmApiKey}
+              onChange={(event) => setLlmApiKey(event.target.value)}
+              placeholder="sk-..."
+              className="mt-1 block w-full max-w-lg rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="llm-base-url" className="block text-sm font-medium text-slate-700">
+              接口地址
+            </label>
+            <input
+              id="llm-base-url"
+              type="url"
+              value={llmBaseUrl}
+              onChange={(event) => setLlmBaseUrl(event.target.value)}
+              placeholder={DEFAULT_LLM_BASE_URL}
+              className="mt-1 block w-full max-w-lg rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              OpenAI 兼容接口。DeepSeek 填 https://api.deepseek.com，OpenAI 填 https://api.openai.com/v1
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="llm-model" className="block text-sm font-medium text-slate-700">
+              模型
+            </label>
+            <input
+              id="llm-model"
+              type="text"
+              value={llmModel}
+              onChange={(event) => setLlmModel(event.target.value)}
+              placeholder={DEFAULT_LLM_MODEL}
+              className="mt-1 block w-full max-w-lg rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSaveLlmSettings}
+              className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              保存设置
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleTestLlmConnection()}
+              disabled={llmTesting}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {llmTesting ? '测试中...' : '测试连接'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <summary className="cursor-pointer px-6 py-4 text-lg font-medium text-slate-900">
+          高级策略设置（懂再开）
+        </summary>
+        <div className="space-y-6 border-t border-slate-200 px-6 pb-6 pt-4">
+        <div>
           <label htmlFor="intra-category-mode" className="block text-sm font-medium text-slate-700">
             类内增配分配
           </label>
@@ -459,11 +610,10 @@ export default function SettingsPage() {
             </p>
           </div>
         ) : null}
-      </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-medium text-slate-900">信号阈值</h3>
-        <p className="mt-1 text-sm text-slate-500">调整再平衡与集中度触发条件</p>
+        <div>
+        <h4 className="text-sm font-medium text-slate-900">规则灵敏度</h4>
+        <p className="mt-1 text-sm text-slate-500">调整何时提示加减仓、合并持仓</p>
 
         <div className="mt-4 space-y-5">
           <div>
@@ -554,10 +704,10 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      </section>
+        </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-medium text-slate-900">基金目录</h3>
+        <div>
+        <h4 className="text-sm font-medium text-slate-900">基金目录</h4>
         <p className="mt-1 text-sm text-slate-500">
           搜索补代码依赖东方财富公开基金目录，建议首次使用前刷新。
         </p>
@@ -569,7 +719,9 @@ export default function SettingsPage() {
         >
           {refreshingCatalog ? '刷新中...' : '刷新基金目录'}
         </button>
-      </section>
+        </div>
+        </div>
+      </details>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-medium text-slate-900">浏览器通知</h3>
@@ -752,6 +904,40 @@ export default function SettingsPage() {
           {syncMutation.isPending ? '同步中...' : '同步数据'}
         </button>
       </div>
+
+      {llmDialog ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="llm-dialog-title"
+          onClick={() => setLlmDialog(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4
+              id="llm-dialog-title"
+              className={`text-lg font-semibold ${
+                llmDialog.ok ? 'text-emerald-800' : 'text-rose-800'
+              }`}
+            >
+              {llmDialog.title}
+            </h4>
+            <p className="mt-3 text-sm leading-relaxed text-slate-700">{llmDialog.message}</p>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setLlmDialog(null)}
+                className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

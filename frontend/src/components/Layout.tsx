@@ -2,11 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom'
 
 const navItems = [
   { to: '/', label: '总览', end: true },
-  { to: '/opportunities', label: '机会' },
-  { to: '/import', label: '导入' },
+  { to: '/advice', label: '本周建议' },
   { to: '/holdings', label: '持仓' },
-  { to: '/signals', label: '信号' },
-  { to: '/analysis', label: '分析' },
   { to: '/settings', label: '设置' },
 ]
 
@@ -16,8 +13,8 @@ export default function Layout() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">基金量化助手</h1>
-            <p className="text-sm text-slate-500">Portfolio overview & signals</p>
+            <h1 className="text-lg font-semibold text-slate-900">基金持仓管家</h1>
+            <p className="text-sm text-slate-500">看清持仓 · 知道要不要动</p>
           </div>
           <nav className="flex flex-wrap gap-1">
             {navItems.map(({ to, label, end }) => (

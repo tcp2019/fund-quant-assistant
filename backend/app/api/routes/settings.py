@@ -8,11 +8,14 @@ from app.db.models import StrategyConfig, SyncLog
 from app.schemas.settings import (
     DEFAULT_TEMPLATES,
     DEFAULT_THRESHOLDS,
+    LlmTestIn,
+    LlmTestOut,
     StrategyOut,
     StrategyUpdateIn,
     SyncLogOut,
     SyncLogsListOut,
 )
+from app.services.llm_interpreter import test_llm_connection
 from app.services.signals.engine import run_signal_engine
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -122,6 +125,16 @@ def update_strategy(payload: StrategyUpdateIn, session: Session = Depends(get_db
 
     run_signal_engine(session)
     return _config_to_out(config)
+
+
+@router.post("/llm/test", response_model=LlmTestOut)
+async def test_llm_settings(payload: LlmTestIn = LlmTestIn()):
+    ok, error = await test_llm_connection(
+        api_key_override=payload.api_key,
+        base_url_override=payload.base_url,
+        model_override=payload.model,
+    )
+    return LlmTestOut(ok=ok, error=error)
 
 
 @router.get("/sync-logs", response_model=SyncLogsListOut)

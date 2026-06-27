@@ -1,0 +1,1 @@
+NAV_DAILY_CHANGE_THRESHOLD = 0.15  # 日涨跌超过 15% 视为异常

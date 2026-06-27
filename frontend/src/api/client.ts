@@ -117,9 +117,17 @@ export async function fetchSignals(): Promise<SignalsListOut> {
 
 export async function fetchSignalInterpretation(
   signalId: number,
-  apiKey?: string,
+  overrides?: { api_key?: string; base_url?: string; model?: string },
 ): Promise<{ signal_id: number; interpretation: string | null; cached: boolean }> {
-  return api.post(`/api/signals/${signalId}/interpret`, { api_key: apiKey })
+  return api.post(`/api/signals/${signalId}/interpret`, overrides ?? {})
+}
+
+export async function testLlmConnection(body: {
+  api_key?: string
+  base_url?: string
+  model?: string
+}): Promise<{ ok: boolean; error: string | null }> {
+  return api.post('/api/settings/llm/test', body)
 }
 
 export async function fetchCorrelation(): Promise<CorrelationOut> {

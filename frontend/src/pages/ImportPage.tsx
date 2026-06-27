@@ -169,7 +169,7 @@ export default function ImportPage() {
       if (summary) {
         maybeNotifyStrongSignals(summary)
       }
-      navigate('/signals')
+      navigate('/advice')
     } catch (err) {
       setError(err instanceof Error ? err.message : '同步失败')
     } finally {

@@ -3,6 +3,7 @@ import {
   fetchBacktestSensitivity,
   fetchBacktestSnapshotStats,
   fetchCorrelation,
+  fetchDailyHistory,
   fetchHoldings,
   fetchHotThemes,
   fetchMacroIndicators,
@@ -23,8 +24,23 @@ import type { StrategyConfig } from '../types'
 
 // ── Queries ──
 
-export function useOverview() {
-  return useQuery({ queryKey: queryKeys.overview, queryFn: fetchOverview })
+export function useOverview(options?: { refetchInterval?: number | false }) {
+  return useQuery({
+    queryKey: queryKeys.overview,
+    queryFn: fetchOverview,
+    refetchInterval: options?.refetchInterval,
+  })
+}
+
+export function useOverviewLive() {
+  return useOverview({ refetchInterval: 5 * 60 * 1000 })
+}
+
+export function useDailyHistory(days = 30) {
+  return useQuery({
+    queryKey: queryKeys.dailyHistory(days),
+    queryFn: () => fetchDailyHistory(days),
+  })
 }
 
 export function useHoldings() {
@@ -35,8 +51,12 @@ export function useSnapshots() {
   return useQuery({ queryKey: queryKeys.snapshots, queryFn: fetchSnapshots })
 }
 
-export function useSignals() {
-  return useQuery({ queryKey: queryKeys.signals, queryFn: fetchSignals })
+export function useSignals(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.signals,
+    queryFn: fetchSignals,
+    enabled: options?.enabled ?? true,
+  })
 }
 
 export function useCorrelation() {
@@ -113,6 +133,7 @@ export function useSyncData() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.signals })
       queryClient.invalidateQueries({ queryKey: queryKeys.overview })
+      queryClient.invalidateQueries({ queryKey: ['dailyHistory'] })
       queryClient.invalidateQueries({ queryKey: queryKeys.holdings })
       queryClient.invalidateQueries({ queryKey: queryKeys.correlation })
       queryClient.invalidateQueries({ queryKey: queryKeys.risk })

@@ -128,6 +128,8 @@ async def interpret_signal_endpoint(
     interpretation = await interpret_signal(
         signal_dict,
         api_key_override=body.api_key,
+        base_url_override=body.base_url,
+        model_override=body.model,
         total_value=total_value,
         weight_pct=weight_pct,
     )

@@ -78,3 +78,14 @@ class SyncLogOut(BaseModel):
 
 class SyncLogsListOut(BaseModel):
     logs: list[SyncLogOut]
+
+
+class LlmTestIn(BaseModel):
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
+class LlmTestOut(BaseModel):
+    ok: bool
+    error: str | None = None

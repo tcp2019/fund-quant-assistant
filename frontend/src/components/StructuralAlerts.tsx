@@ -9,8 +9,8 @@ const ACTION_META: Record<
   StructuralAction['action'],
   { emoji: string; title: string }
 > = {
-  consolidate: { emoji: '📦', title: '持仓合并' },
-  rebalance_review: { emoji: '📋', title: '年度审视' },
+  consolidate: { emoji: '📦', title: '基金太多，建议整理' },
+  rebalance_review: { emoji: '📋', title: '该整体看一眼了' },
 }
 
 function blockedBuyText(item: StructuralAction) {
@@ -28,8 +28,8 @@ export default function StructuralAlerts({ items, className = '' }: StructuralAl
   return (
     <section className={`space-y-3 ${className}`.trim()}>
       <div>
-        <h3 className="text-base font-semibold text-slate-900">结构待办</h3>
-        <p className="mt-1 text-sm text-slate-500">先处理组合结构问题，再执行下方交易建议</p>
+        <h3 className="text-base font-semibold text-slate-900">先处理这些</h3>
+        <p className="mt-1 text-sm text-slate-500">整理完组合结构后，再考虑下方的买卖建议</p>
       </div>
       <ul className="space-y-3">
         {items.map((item) => {

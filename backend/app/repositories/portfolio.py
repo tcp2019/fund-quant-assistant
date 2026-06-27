@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 
 from sqlalchemy import and_, func
 from sqlmodel import Session, select
@@ -9,11 +10,15 @@ from app.schemas.portfolio import (
     HoldingIn,
     HoldingOut,
     HoldingThemeOut,
+    NavAnomalyOut,
     OverviewOut,
+    DailyHistoryOut,
+    DailyHistoryPointOut,
     SnapshotCreate,
     SnapshotSummaryOut,
     ThemeAllocationOut,
 )
+from app.services.nav_thresholds import NAV_DAILY_CHANGE_THRESHOLD
 from app.services.fund_classifier import classify_fund
 from app.services.fund_themes import detect_themes, primary_theme, theme_label
 from app.services.peer_metrics import parse_user_themes
@@ -133,6 +138,64 @@ def _holding_themes_out(session: Session, holding: Holding) -> list[HoldingTheme
     ]
 
 
+def _fetch_prev_nav_map(
+    session: Session, latest_by_code: dict[str, FundNavHistory]
+) -> dict[str, FundNavHistory]:
+    if not latest_by_code:
+        return {}
+    codes = list(latest_by_code.keys())
+    ranked = (
+        select(
+            FundNavHistory.id,
+            func.row_number()
+            .over(
+                partition_by=FundNavHistory.code,
+                order_by=FundNavHistory.date.desc(),
+            )
+            .label("rn"),
+        )
+        .where(FundNavHistory.code.in_(codes))
+        .subquery()
+    )
+    prev_ids = session.exec(select(ranked.c.id).where(ranked.c.rn == 2)).all()
+    if not prev_ids:
+        return {}
+    rows = session.exec(select(FundNavHistory).where(FundNavHistory.id.in_(prev_ids))).all()
+    return {row.code: row for row in rows}
+
+
+def _compute_daily_metrics(
+    shares: float,
+    latest: FundNavHistory | None,
+    prev: FundNavHistory | None,
+) -> tuple[float | None, float | None, str | None]:
+    if latest is None or prev is None or shares <= 0 or prev.nav <= 0:
+        return None, None, prev.date if prev else None
+
+    daily_profit = shares * (latest.nav - prev.nav)
+    nav_change_pct = latest.nav / prev.nav - 1
+    return daily_profit, nav_change_pct, prev.date
+
+
+def _maybe_nav_anomaly(
+    holding: Holding,
+    latest: FundNavHistory,
+    prev: FundNavHistory,
+    nav_change_pct: float | None,
+) -> NavAnomalyOut | None:
+    if nav_change_pct is None or abs(nav_change_pct) <= NAV_DAILY_CHANGE_THRESHOLD:
+        return None
+    return NavAnomalyOut(
+        fund_code=holding.fund_code,
+        fund_name=holding.fund_name,
+        nav_date=latest.date,
+        prev_nav_date=prev.date,
+        prev_nav=round(prev.nav, 4),
+        curr_nav=round(latest.nav, 4),
+        change_pct=round(nav_change_pct * 100, 2),
+    )
+
+
 def _holding_to_out(
     session: Session,
     holding: Holding,
@@ -141,6 +204,9 @@ def _holding_to_out(
     current_value: float = 0.0,
     current_profit: float = 0.0,
     nav_date: str | None = None,
+    prev_nav_date: str | None = None,
+    daily_profit: float | None = None,
+    nav_change_pct: float | None = None,
 ) -> HoldingOut:
     return HoldingOut(
         fund_code=holding.fund_code,
@@ -156,6 +222,9 @@ def _holding_to_out(
         current_value=round(current_value, 2),
         current_profit=round(current_profit, 2),
         nav_date=nav_date,
+        prev_nav_date=prev_nav_date,
+        daily_profit=round(daily_profit, 2) if daily_profit is not None else None,
+        nav_change_pct=round(nav_change_pct, 4) if nav_change_pct is not None else None,
         themes=_holding_themes_out(session, holding),
     )
 
@@ -261,6 +330,7 @@ def build_overview(session: Session) -> OverviewOut:
     # --- real-time NAV revaluation ---
     fund_codes = [h.fund_code for h in holdings]
     nav_by_code: dict[str, FundNavHistory] = {}
+    prev_nav_by_code: dict[str, FundNavHistory] = {}
     overall_nav_date: str | None = None
 
     if fund_codes:
@@ -284,20 +354,39 @@ def build_overview(session: Session) -> OverviewOut:
         ).all()
         nav_by_code = {row.code: row for row in nav_rows}
         overall_nav_date = max((row.date for row in nav_rows), default=None)
+        prev_nav_by_code = _fetch_prev_nav_map(session, nav_by_code)
 
     current_total_value = 0.0
     current_total_profit = 0.0
+    daily_total_profit_sum = 0.0
+    daily_total_complete = True
+    nav_anomalies: list[NavAnomalyOut] = []
 
     out_holdings: list[HoldingOut] = []
     for h in holdings:
         weight = (h.market_value / total_value * 100) if total_value else 0.0
         nav_row = nav_by_code.get(h.fund_code)
+        prev_nav_row = prev_nav_by_code.get(h.fund_code) if nav_row else None
         if nav_row is not None and h.shares > 0:
             cv = h.shares * nav_row.nav
             cp = cv - _holding_total_cost(h)
         else:
             cv = h.market_value
             cp = h.profit
+
+        daily_profit, nav_change_pct, prev_nav_date = _compute_daily_metrics(
+            h.shares, nav_row, prev_nav_row
+        )
+        if h.shares > 0:
+            if daily_profit is None:
+                daily_total_complete = False
+            else:
+                daily_total_profit_sum += daily_profit
+        if nav_row and prev_nav_row:
+            anomaly = _maybe_nav_anomaly(h, nav_row, prev_nav_row, nav_change_pct)
+            if anomaly is not None:
+                nav_anomalies.append(anomaly)
+
         current_total_value += cv
         current_total_profit += cp
         out_holdings.append(
@@ -308,6 +397,9 @@ def build_overview(session: Session) -> OverviewOut:
                 current_value=cv,
                 current_profit=cp,
                 nav_date=nav_row.date if nav_row else None,
+                prev_nav_date=prev_nav_date,
+                daily_profit=daily_profit,
+                nav_change_pct=nav_change_pct,
             )
         )
 
@@ -319,6 +411,12 @@ def build_overview(session: Session) -> OverviewOut:
     top_holdings = sorted_by_weight[:5]
     concentration_top5_pct = round(sum(item.weight_pct for item in top_holdings), 2)
 
+    has_positive_shares = any(h.shares > 0 for h in holdings)
+    if daily_total_complete and has_positive_shares:
+        portfolio_daily_total = round(daily_total_profit_sum, 2)
+    else:
+        portfolio_daily_total = None
+
     return OverviewOut(
         snapshot_id=snap.id,
         total_value=round(total_value, 2),
@@ -329,6 +427,8 @@ def build_overview(session: Session) -> OverviewOut:
         current_total_profit=round(current_total_profit, 2),
         current_total_profit_rate=round(current_total_profit_rate, 4),
         nav_date=overall_nav_date,
+        daily_total_profit=portfolio_daily_total,
+        nav_anomalies=nav_anomalies,
         holdings=out_holdings,
         category_allocation=_build_category_allocation(session, holdings, total_value),
         theme_allocation=_build_theme_allocation(session, holdings, total_value),
@@ -336,3 +436,64 @@ def build_overview(session: Session) -> OverviewOut:
         concentration_top5_pct=concentration_top5_pct,
         data_as_of_date=_portfolio_as_of_date(session, fund_codes),
     )
+
+
+def build_daily_history(session: Session, days: int = 30) -> DailyHistoryOut:
+    snap = get_latest_snapshot(session)
+    if snap is None:
+        return DailyHistoryOut(days=days, points=[])
+
+    holdings = session.exec(select(Holding).where(Holding.snapshot_id == snap.id)).all()
+    active = [h for h in holdings if h.shares > 0]
+    if not active:
+        return DailyHistoryOut(days=days, points=[])
+
+    shares_by_code = {h.fund_code: h.shares for h in active}
+    required_codes = set(shares_by_code.keys())
+
+    daily_profit_by_date: dict[str, float] = defaultdict(float)
+    contributors_by_date: dict[str, set[str]] = defaultdict(set)
+    value_by_date: dict[str, float] = defaultdict(float)
+    value_codes_by_date: dict[str, set[str]] = defaultdict(set)
+
+    for holding in active:
+        code = holding.fund_code
+        shares = holding.shares
+        rows = session.exec(
+            select(FundNavHistory)
+            .where(FundNavHistory.code == code)
+            .order_by(FundNavHistory.date)
+        ).all()
+        if len(rows) > days + 1:
+            rows = rows[-(days + 1):]
+        if len(rows) < 2:
+            continue
+
+        for row in rows:
+            value_by_date[row.date] += shares * row.nav
+            value_codes_by_date[row.date].add(code)
+
+        for prev, curr in zip(rows, rows[1:]):
+            daily_profit_by_date[curr.date] += shares * (curr.nav - prev.nav)
+            contributors_by_date[curr.date].add(code)
+
+    dates = sorted(daily_profit_by_date.keys())
+    if len(dates) > days:
+        dates = dates[-days:]
+
+    points: list[DailyHistoryPointOut] = []
+    for date in dates:
+        complete = contributors_by_date[date] == required_codes
+        total_value = None
+        if value_codes_by_date[date] == required_codes:
+            total_value = round(value_by_date[date], 2)
+        points.append(
+            DailyHistoryPointOut(
+                date=date,
+                daily_profit=round(daily_profit_by_date[date], 2),
+                total_value=total_value,
+                complete=complete,
+            )
+        )
+
+    return DailyHistoryOut(days=days, points=points)

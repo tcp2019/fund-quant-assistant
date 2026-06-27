@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HoldingIn(BaseModel):
@@ -20,6 +20,17 @@ class HoldingThemeOut(BaseModel):
     label: str
 
 
+class NavAnomalyOut(BaseModel):
+    fund_code: str
+    fund_name: str
+    nav_date: str
+    prev_nav_date: str
+    prev_nav: float
+    curr_nav: float
+    change_pct: float
+    likely_reason: str = "可能是分红/拆分未复权，或数据源异常"
+
+
 class SnapshotCreate(BaseModel):
     holdings: list[HoldingIn]
     source: str = "manual"
@@ -31,6 +42,9 @@ class HoldingOut(HoldingIn):
     current_value: float = 0.0
     current_profit: float = 0.0
     nav_date: str | None = None
+    prev_nav_date: str | None = None
+    daily_profit: float | None = None
+    nav_change_pct: float | None = None
     themes: list[HoldingThemeOut] = []
 
 
@@ -58,6 +72,8 @@ class OverviewOut(BaseModel):
     current_total_profit: float = 0.0
     current_total_profit_rate: float = 0.0
     nav_date: str | None = None
+    daily_total_profit: float | None = None
+    nav_anomalies: list[NavAnomalyOut] = []
     holdings: list[HoldingOut]
     category_allocation: list[CategoryAllocationOut] = []
     theme_allocation: list[ThemeAllocationOut] = []
@@ -75,3 +91,15 @@ class SnapshotSummaryOut(BaseModel):
 
 class SnapshotsListOut(BaseModel):
     snapshots: list[SnapshotSummaryOut]
+
+
+class DailyHistoryPointOut(BaseModel):
+    date: str
+    daily_profit: float
+    total_value: float | None = None
+    complete: bool = False
+
+
+class DailyHistoryOut(BaseModel):
+    days: int
+    points: list[DailyHistoryPointOut] = Field(default_factory=list)

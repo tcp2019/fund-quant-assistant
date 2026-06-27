@@ -1,18 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import {
+  LegacyAnalysisRedirect,
+  LegacyOpportunitiesRedirect,
+  LegacySignalsRedirect,
+} from './components/LegacyRedirects'
 import Layout from './components/Layout'
-import AnalysisPage from './pages/AnalysisPage'
+import AdvicePage from './pages/AdvicePage'
 import Dashboard from './pages/Dashboard'
 import HoldingsPage from './pages/HoldingsPage'
 import ImportPage from './pages/ImportPage'
-import OpportunitiesPage from './pages/OpportunitiesPage'
+import InsightsPage from './pages/InsightsPage'
 import SettingsPage from './pages/SettingsPage'
-import SignalsPage from './pages/SignalsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 5 * 60 * 1000,
       refetchOnWindowFocus: false,
       retry: 1,
     },
@@ -26,12 +30,14 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Dashboard />} />
-            <Route path="opportunities" element={<OpportunitiesPage />} />
-            <Route path="import" element={<ImportPage />} />
+            <Route path="advice" element={<AdvicePage />} />
             <Route path="holdings" element={<HoldingsPage />} />
-            <Route path="signals" element={<SignalsPage />} />
-            <Route path="analysis" element={<AnalysisPage />} />
+            <Route path="insights" element={<InsightsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="import" element={<ImportPage />} />
+            <Route path="signals" element={<LegacySignalsRedirect />} />
+            <Route path="opportunities" element={<LegacyOpportunitiesRedirect />} />
+            <Route path="analysis" element={<LegacyAnalysisRedirect />} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -3,6 +3,17 @@ export interface HoldingTheme {
   label: string
 }
 
+export interface NavAnomaly {
+  fund_code: string
+  fund_name: string
+  nav_date: string
+  prev_nav_date: string
+  prev_nav: number
+  curr_nav: number
+  change_pct: number
+  likely_reason: string
+}
+
 export interface Holding {
   fund_code: string
   fund_name: string
@@ -17,6 +28,9 @@ export interface Holding {
   current_value?: number
   current_profit?: number
   nav_date?: string | null
+  prev_nav_date?: string | null
+  daily_profit?: number | null
+  nav_change_pct?: number | null
   themes?: HoldingTheme[]
 }
 
@@ -30,12 +44,26 @@ export interface Overview {
   current_total_profit?: number
   current_total_profit_rate?: number
   nav_date?: string | null
+  daily_total_profit?: number | null
+  nav_anomalies?: NavAnomaly[]
   holdings: Holding[]
   category_allocation: CategoryAllocation[]
   theme_allocation?: ThemeAllocation[]
   top_holdings: Holding[]
   concentration_top5_pct: number
   data_as_of_date?: string | null
+}
+
+export interface DailyHistoryPoint {
+  date: string
+  daily_profit: number
+  total_value?: number | null
+  complete: boolean
+}
+
+export interface DailyHistory {
+  days: number
+  points: DailyHistoryPoint[]
 }
 
 export interface CategoryAllocation {

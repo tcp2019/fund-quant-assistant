@@ -20,6 +20,7 @@ import {
 
 export const queryKeys = {
   overview: ['overview'] as const,
+  dailyHistory: (days: number) => ['dailyHistory', days] as const,
   holdings: ['holdings'] as const,
   signals: ['signals'] as const,
   correlation: ['correlation'] as const,
@@ -44,6 +45,12 @@ export const queryKeys = {
 
 export async function fetchOverview() {
   return api.get<import('../types').Overview>('/api/portfolio/overview')
+}
+
+export async function fetchDailyHistory(days = 30) {
+  return api.get<import('../types').DailyHistory>(
+    `/api/portfolio/daily-history?days=${days}`,
+  )
 }
 
 export async function fetchHoldings() {

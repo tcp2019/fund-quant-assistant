@@ -14,6 +14,7 @@ import {
 } from '../utils/signalDisplay'
 import type { Signal, SignalReason } from '../types'
 import { fetchSignalInterpretation } from '../api/client'
+import { getLlmRequestOverrides } from '../utils/llmSettings'
 
 interface SignalsTableProps {
   signals: Signal[]
@@ -66,7 +67,7 @@ function AIInterpretation({ signal }: { signal: Signal }) {
   async function handleInterpret() {
     setState('loading')
     try {
-      const result = await fetchSignalInterpretation(signal.id)
+      const result = await fetchSignalInterpretation(signal.id, getLlmRequestOverrides())
       if (result.interpretation) {
         setText(result.interpretation)
         setState('result')
@@ -110,7 +111,12 @@ function AIInterpretation({ signal }: { signal: Signal }) {
   }
 
   if (state === 'error') {
-    return <p className="text-xs text-slate-400">AI 解读暂不可用</p>
+    return (
+      <p className="text-xs text-slate-400">
+        AI 解读暂不可用
+        {getLlmRequestOverrides().api_key ? '' : '，请在设置中配置 API Key'}
+      </p>
+    )
   }
 
   return (

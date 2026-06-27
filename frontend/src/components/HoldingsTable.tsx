@@ -12,6 +12,7 @@ export default function HoldingsTable({ holdings }: HoldingsTableProps) {
   const hasRealtime = sortedHoldings.some(
     (h) => h.current_value && h.current_value > 0 && h.nav_date,
   )
+  const hasDailyProfit = sortedHoldings.some((h) => h.daily_profit !== null && h.daily_profit !== undefined)
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -28,6 +29,9 @@ export default function HoldingsTable({ holdings }: HoldingsTableProps) {
               <th className="px-5 py-3 font-medium text-right">
                 {hasRealtime ? '实时市值' : '市值'}
               </th>
+              {hasDailyProfit ? (
+                <th className="px-5 py-3 font-medium text-right">今日盈亏</th>
+              ) : null}
               <th className="px-5 py-3 font-medium text-right">成本价</th>
               <th className="px-5 py-3 font-medium text-right">盈亏</th>
               <th className="px-5 py-3 font-medium text-right">收益率</th>
@@ -45,6 +49,8 @@ export default function HoldingsTable({ holdings }: HoldingsTableProps) {
                 hasRealtime && holding.current_value && holding.current_value > 0
                   ? displayProfit / (displayValue - displayProfit)
                   : holding.profit_rate
+              const hasHoldingDaily =
+                holding.daily_profit !== null && holding.daily_profit !== undefined
 
               return (
                 <tr
@@ -70,6 +76,15 @@ export default function HoldingsTable({ holdings }: HoldingsTableProps) {
                       formatCurrency(holding.market_value)
                     )}
                   </td>
+                  {hasDailyProfit ? (
+                    <td
+                      className={`px-5 py-3 text-right font-medium ${
+                        hasHoldingDaily ? profitLossTextClass(holding.daily_profit!) : 'text-slate-400'
+                      }`}
+                    >
+                      {hasHoldingDaily ? formatProfitAmount(holding.daily_profit!) : '—'}
+                    </td>
+                  ) : null}
                   <td className="px-5 py-3 text-right">{formatCurrency(holding.cost_price)}</td>
                   <td
                     className={`px-5 py-3 text-right font-medium ${profitLossTextClass(displayProfit)}`}
