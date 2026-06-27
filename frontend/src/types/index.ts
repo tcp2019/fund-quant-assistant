@@ -261,3 +261,14 @@ export interface SnapshotStat {
 export interface SnapshotStatsOut {
   snapshots: SnapshotStat[]
 }
+
+export interface SyncLogEntry {
+  id: number
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'done' | 'partial' | 'failed'
+  total_funds: number
+  success_funds: number
+  failed_funds: number
+  errors_json: string
+}
